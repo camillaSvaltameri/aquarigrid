@@ -485,15 +485,29 @@ class Swipe extends Phaser.Scene {
 
         const panelWidth = config.panelWidth || 180;
 
-        const panel = this.add.image(0, 0, "uiPanel");
-        panel.setDisplaySize(panelWidth, 56);
-        panel.setAlpha(0.78);
+        const panel = this.add.rectangle(
+            0,
+            0,
+            panelWidth,
+            56,
+            0x000000,
+            0.28
+        );
+
+        panel.setStrokeStyle(2, 0xffffff, 0.18);
 
         const iconX = -panelWidth / 2 + 35;
         const textX = -panelWidth / 2 + 72;
 
         const icon = this.add.image(iconX, 0, config.iconKey);
-        this.fitSpriteToCell(icon, 46, 46);
+
+        if (config.iconKey === "rock") {
+            this.fitSpriteToCell(icon, 64, 64);
+        } else if (config.iconKey === "medKit") {
+            this.fitSpriteToCell(icon, 54, 54);
+        } else {
+            this.fitSpriteToCell(icon, 46, 46);
+        }
 
         const text = this.add.text(
             textX,
@@ -556,7 +570,7 @@ class Swipe extends Phaser.Scene {
             0.45
         );
 
-        const menuText = this.add.text(
+        this.menuText = this.add.text(
             0,
             0,
             "MENU\n\nPress U to see unlocks\nPress ENTER to go back",
@@ -570,9 +584,9 @@ class Swipe extends Phaser.Scene {
             }
         );
 
-        menuText.setOrigin(0.5);
+        this.menuText.setOrigin(0.5);
 
-        this.menuOverlay.add([backdrop, menuText]);
+        this.menuOverlay.add([backdrop, this.menuText]);
     }
 
     closeMenu() {
@@ -596,6 +610,10 @@ class Swipe extends Phaser.Scene {
         this.unlockMenuOpen = true;
         this.unlockScrollY = 0;
 
+        if (this.menuText) {
+            this.menuText.setVisible(false);
+        }
+    
         const centerX = this.game.config.width / 2;
         const centerY = this.grid.centerY + 20;
 
@@ -764,6 +782,10 @@ class Swipe extends Phaser.Scene {
         }
 
         this.unlockListContainer = null;
+
+        if (this.menuText) {
+            this.menuText.setVisible(true);
+        }
     }
 
     scrollUnlockMenu(deltaY) {
@@ -1132,7 +1154,7 @@ class Swipe extends Phaser.Scene {
     getUnlockCategoryLabel(unlockType) {
         switch (unlockType) {
             case "starter":
-                return "starter fish";
+                return "unlocked fish";
             case "drop":
                 return "random drop unlocks";
             case "coin":
@@ -1263,8 +1285,8 @@ class Swipe extends Phaser.Scene {
             this.rockShieldSprite.destroy();
         }
 
-        this.rockShieldSprite = this.add.image(38, 10, "rock");
-        this.fitSpriteToCell(this.rockShieldSprite, 38, 38);
+        this.rockShieldSprite = this.add.image(44, 10, "rock");
+        this.fitSpriteToCell(this.rockShieldSprite, 52, 52);
 
         this.playerVisualContainer.add(this.rockShieldSprite);
     }
