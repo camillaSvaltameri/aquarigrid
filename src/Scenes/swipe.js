@@ -9,6 +9,12 @@ class Swipe extends Phaser.Scene {
         this.load.image("board", "./assets/board.png");
         this.load.image("anchovy", "./assets/Anchovy.png");
 
+        for (const fish of this.getFishDefinitions()) {
+            if (fish.key !== "anchovy") {
+                this.load.image(fish.key, `./assets/${fish.file}`);
+            }
+        }
+
         // Tile assets
         this.load.image("worm", "./assets/worm.png");
         this.load.image("wormMove", "./assets/wormMove.png");
@@ -17,6 +23,7 @@ class Swipe extends Phaser.Scene {
 
         // UI / item assets
         this.load.image("uiPanel", "./assets/UIpanel.png");
+        this.load.image("unlockMenuBG", "./assets/unlockMenuBG.png");
         this.load.image("medKit", "./assets/medKit.png");
         this.load.image("rock", "./assets/rock.png");
         this.load.image("gold", "./assets/gold.png");
@@ -42,12 +49,20 @@ class Swipe extends Phaser.Scene {
         this.boardImage.displayHeight = this.game.config.height;
 
         this.textures.get("anchovy").setFilter(Phaser.Textures.FilterMode.NEAREST);
+
+        for (const fish of this.getFishDefinitions()) {
+            if (this.textures.exists(fish.key)) {
+                this.textures.get(fish.key).setFilter(Phaser.Textures.FilterMode.NEAREST);
+            }
+        }
+
         this.textures.get("worm").setFilter(Phaser.Textures.FilterMode.NEAREST);
         this.textures.get("wormMove").setFilter(Phaser.Textures.FilterMode.NEAREST);
         this.textures.get("key").setFilter(Phaser.Textures.FilterMode.NEAREST);
         this.textures.get("loot").setFilter(Phaser.Textures.FilterMode.NEAREST);
 
         this.textures.get("uiPanel").setFilter(Phaser.Textures.FilterMode.NEAREST);
+        this.textures.get("unlockMenuBG").setFilter(Phaser.Textures.FilterMode.NEAREST);
         this.textures.get("medKit").setFilter(Phaser.Textures.FilterMode.NEAREST);
         this.textures.get("rock").setFilter(Phaser.Textures.FilterMode.NEAREST);
         this.textures.get("gold").setFilter(Phaser.Textures.FilterMode.NEAREST);
@@ -192,6 +207,20 @@ class Swipe extends Phaser.Scene {
         this.medKitCount = 100;
         this.rockCount = 100;
 
+        this.currentFishKey = "anchovy";
+
+        this.unlockedFishKeys = {
+            anchovy: true
+        };
+
+        this.fishPieces = {};
+
+        for (const fish of this.getFishDefinitions()) {
+            if (fish.unlockType === "drop") {
+                this.fishPieces[fish.key] = 0;
+            }
+        }
+
         // -------------------------------
         // LEVEL STATE
         // -------------------------------
@@ -205,6 +234,9 @@ class Swipe extends Phaser.Scene {
 
         this.levelEnded = false;
         this.menuOpen = false;
+        this.unlockMenuOpen = false;
+        this.unlockScrollY = 0;
+        this.unlockMaxScroll = 0;
         this.turnCount = 0;
 
         this.chestsSpawned = 0;
@@ -237,7 +269,7 @@ class Swipe extends Phaser.Scene {
         this.playerContainer = this.add.container(startWorldPos.x, startWorldPos.y);
         this.playerVisualContainer = this.add.container(0, 0);
 
-        this.player = this.add.image(0, 0, "anchovy");
+        this.player = this.add.image(0, 0, this.currentFishKey);
         this.player.setScale(5);
 
         this.healthText = this.add.text(
@@ -272,7 +304,14 @@ class Swipe extends Phaser.Scene {
             down: Phaser.Input.Keyboard.KeyCodes.S,
             left: Phaser.Input.Keyboard.KeyCodes.A,
             right: Phaser.Input.Keyboard.KeyCodes.D,
-            enter: Phaser.Input.Keyboard.KeyCodes.ENTER
+            enter: Phaser.Input.Keyboard.KeyCodes.ENTER,
+            u: Phaser.Input.Keyboard.KeyCodes.U
+        });
+
+        this.input.on("wheel", (pointer, gameObjects, deltaX, deltaY) => {
+            if (this.unlockMenuOpen) {
+                this.scrollUnlockMenu(deltaY);
+            }
         });
 
         this.isMoving = false;
@@ -282,8 +321,26 @@ class Swipe extends Phaser.Scene {
 
     update() {
         if (this.menuOpen) {
+            if (Phaser.Input.Keyboard.JustDown(this.keys.u)) {
+                if (this.unlockMenuOpen) {
+                    this.closeUnlockMenu();
+                } else {
+                    this.openUnlockMenu();
+                }
+            }
+
+            if (Phaser.Input.Keyboard.JustDown(this.keys.up)) {
+                this.scrollUnlockMenu(-70);
+            } else if (Phaser.Input.Keyboard.JustDown(this.keys.down)) {
+                this.scrollUnlockMenu(70);
+            }
+
             if (Phaser.Input.Keyboard.JustDown(this.keys.enter)) {
-                this.closeMenu();
+                if (this.unlockMenuOpen) {
+                    this.closeUnlockMenu();
+                } else {
+                    this.closeMenu();
+                }
             }
 
             return;
@@ -502,7 +559,7 @@ class Swipe extends Phaser.Scene {
         const menuText = this.add.text(
             0,
             0,
-            "MENU\n\nPress ENTER to go back",
+            "MENU\n\nPress U to see unlocks\nPress ENTER to go back",
             {
                 fontFamily: "Arial",
                 fontSize: "42px",
@@ -519,12 +576,613 @@ class Swipe extends Phaser.Scene {
     }
 
     closeMenu() {
+        if (this.unlockMenuOpen) {
+            this.closeUnlockMenu();
+        }
+
         this.menuOpen = false;
 
         if (this.menuOverlay) {
             this.menuOverlay.destroy();
             this.menuOverlay = null;
         }
+    }
+
+    openUnlockMenu() {
+        if (this.unlockMenuOpen) {
+            return;
+        }
+
+        this.unlockMenuOpen = true;
+        this.unlockScrollY = 0;
+
+        const centerX = this.game.config.width / 2;
+        const centerY = this.grid.centerY + 20;
+
+        this.unlockMenuOverlay = this.add.container(centerX, centerY);
+        this.unlockMenuOverlay.setDepth(560);
+
+        const bg = this.add.image(0, 0, "unlockMenuBG");
+        bg.setDisplaySize(760, 620);
+        bg.setAlpha(0.96);
+
+        const title = this.add.text(
+            0,
+            -275,
+            "fish unlocks",
+            {
+                fontFamily: "Arial",
+                fontSize: "34px",
+                color: "#ffffff",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 7
+            }
+        );
+
+        title.setOrigin(0.5);
+
+        const helperText = this.add.text(
+            0,
+            270,
+            "mouse wheel or W/S to scroll • enter to close",
+            {
+                fontFamily: "Arial",
+                fontSize: "18px",
+                color: "#ffffff",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 5
+            }
+        );
+
+        helperText.setOrigin(0.5);
+
+        this.unlockListContainer = this.add.container(-305, -205);
+
+        this.unlockMenuOverlay.add([bg, title, this.unlockListContainer, helperText]);
+
+        this.unlockMaskGraphics = this.make.graphics({ x: 0, y: 0, add: false });
+        this.unlockMaskGraphics.fillStyle(0xffffff);
+        this.unlockMaskGraphics.fillRect(centerX - 340, centerY - 220, 680, 440);
+
+        this.unlockListMask = this.unlockMaskGraphics.createGeometryMask();
+        this.unlockListContainer.setMask(this.unlockListMask);
+
+        this.populateUnlockList();
+    }
+
+    populateUnlockList() {
+        this.unlockListContainer.removeAll(true);
+
+        const fishList = this.getSortedFishDefinitions();
+        let currentCategory = "";
+        let rowY = 0;
+        const rowHeight = 86;
+
+        for (const fish of fishList) {
+            const categoryLabel = this.getUnlockCategoryLabel(fish.unlockType);
+
+            if (categoryLabel !== currentCategory) {
+                currentCategory = categoryLabel;
+
+                const categoryText = this.add.text(
+                    0,
+                    rowY,
+                    categoryLabel,
+                    {
+                        fontFamily: "Arial",
+                        fontSize: "22px",
+                        color: "#ffeaa7",
+                        stroke: "#000000",
+                        strokeThickness: 5
+                    }
+                );
+
+                categoryText.setOrigin(0, 0.5);
+                this.unlockListContainer.add(categoryText);
+
+                rowY += 36;
+            }
+
+            const rowContainer = this.add.container(0, rowY);
+
+            const rowPanel = this.add.rectangle(
+                305,
+                0,
+                610,
+                74,
+                0x000000,
+                0.28
+            );
+
+            rowPanel.setStrokeStyle(2, 0xffffff, 0.18);
+
+            const fishSprite = this.add.image(36, 2, fish.key);
+            fishSprite.setScale(5);
+
+            const nameText = this.add.text(
+                90,
+                -14,
+                fish.displayName,
+                {
+                    fontFamily: "Arial",
+                    fontSize: "22px",
+                    color: "#ffffff",
+                    stroke: "#000000",
+                    strokeThickness: 5
+                }
+            );
+
+            nameText.setOrigin(0, 0.5);
+
+            const statusInfo = this.getFishUnlockStatusText(fish);
+
+            const statusText = this.add.text(
+                90,
+                18,
+                statusInfo.text,
+                {
+                    fontFamily: "Arial",
+                    fontSize: "17px",
+                    color: statusInfo.color,
+                    stroke: "#000000",
+                    strokeThickness: 4
+                }
+            );
+
+            statusText.setOrigin(0, 0.5);
+
+            rowContainer.add([rowPanel, fishSprite, nameText, statusText]);
+            this.unlockListContainer.add(rowContainer);
+
+            rowY += rowHeight;
+        }
+
+        const visibleHeight = 440;
+        this.unlockMaxScroll = Math.max(0, rowY - visibleHeight);
+        this.unlockListContainer.y = -205;
+    }
+
+    closeUnlockMenu() {
+        this.unlockMenuOpen = false;
+
+        if (this.unlockListContainer) {
+            this.unlockListContainer.clearMask();
+        }
+
+        if (this.unlockMaskGraphics) {
+            this.unlockMaskGraphics.destroy();
+            this.unlockMaskGraphics = null;
+        }
+
+        this.unlockListMask = null;
+
+        if (this.unlockMenuOverlay) {
+            this.unlockMenuOverlay.destroy();
+            this.unlockMenuOverlay = null;
+        }
+
+        this.unlockListContainer = null;
+    }
+
+    scrollUnlockMenu(deltaY) {
+        if (!this.unlockMenuOpen || !this.unlockListContainer) {
+            return;
+        }
+
+        this.unlockScrollY = Phaser.Math.Clamp(
+            this.unlockScrollY + deltaY,
+            0,
+            this.unlockMaxScroll
+        );
+
+        this.unlockListContainer.y = -205 - this.unlockScrollY;
+    }
+
+    getFishDefinitions() {
+        return [
+            {
+                key: "anchovy",
+                file: "Anchovy.png",
+                displayName: "Anchovy",
+                unlockType: "starter",
+                piecesRequired: 0,
+                dropWeight: 0,
+                price: 0
+            },
+            {
+                key: "angelfish",
+                file: "Angelfish.png",
+                displayName: "Angelfish",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "anglerfish",
+                file: "Anglerfish.png",
+                displayName: "Anglerfish",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "bass",
+                file: "Bass.png",
+                displayName: "Bass",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "blueAngelfish",
+                file: "BlueAngelfish.png",
+                displayName: "Blue Angelfish",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "bluegill",
+                file: "Bluegill.png",
+                displayName: "Bluegill",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "carp",
+                file: "Carp.png",
+                displayName: "Carp",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "catfish",
+                file: "Catfish.png",
+                displayName: "Catfish",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "clownfish",
+                file: "Clownfish.png",
+                displayName: "Clownfish",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "cohoSalmon",
+                file: "CohoSalmon.png",
+                displayName: "Coho Salmon",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "crab",
+                file: "Crab.png",
+                displayName: "Crab",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "flounder",
+                file: "Flounder.png",
+                displayName: "Flounder",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "goby",
+                file: "Goby.png",
+                displayName: "Goby",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "goldfish",
+                file: "Goldfish.png",
+                displayName: "Goldfish",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "greatWhiteShark",
+                file: "Great White Shark.png",
+                displayName: "Great White Shark",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "groper",
+                file: "Groper.png",
+                displayName: "Groper",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "guppy",
+                file: "Guppy.png",
+                displayName: "Guppy",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "jellyfish",
+                file: "Jellyfish.png",
+                displayName: "Jellyfish",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "morayEel",
+                file: "Moray Eel.png",
+                displayName: "Moray Eel",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "napoleonWrasse",
+                file: "Napoleon Wrasse.png",
+                displayName: "Napoleon Wrasse",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "neonTetra",
+                file: "NeonTetra.png",
+                displayName: "Neon Tetra",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "perch",
+                file: "Perch.png",
+                displayName: "Perch",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "pufferfish",
+                file: "Pufferfish.png",
+                displayName: "Pufferfish",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "purpleTang",
+                file: "PurpleTang.png",
+                displayName: "Purple Tang",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "rainbowTrout",
+                file: "RainbowTrout.png",
+                displayName: "Rainbow Trout",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "ribbonEel",
+                file: "RibbonEel.png",
+                displayName: "Ribbon Eel",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "seahorse",
+                file: "Seahorse.png",
+                displayName: "Seahorse",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "shrimp",
+                file: "Shrimp.png",
+                displayName: "Shrimp",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "silverjawMinnow",
+                file: "SilverjawMinnow.png",
+                displayName: "Silverjaw Minnow",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "starfish",
+                file: "Starfish.png",
+                displayName: "Starfish",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "stingray",
+                file: "Stingray.png",
+                displayName: "Stingray",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "surgeonfish",
+                file: "Surgeonfish.png",
+                displayName: "Surgeonfish",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "tadpole",
+                file: "Tadpole.png",
+                displayName: "Tadpole",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "tuna",
+                file: "Tuna.png",
+                displayName: "Tuna",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "upsideDownJellyfish",
+                file: "UpsideDownJellyfish.png",
+                displayName: "Upside Down Jellyfish",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            },
+            {
+                key: "yellowTang",
+                file: "YellowTang.png",
+                displayName: "Yellow Tang",
+                unlockType: "drop",
+                piecesRequired: 10,
+                dropWeight: 10,
+                price: 0
+            }
+        ];
+    }
+
+    getSortedFishDefinitions() {
+        const categoryOrder = {
+            starter: 0,
+            drop: 1,
+            coin: 2,
+            gem: 3
+        };
+
+        return [...this.getFishDefinitions()].sort((a, b) => {
+            const categoryA = categoryOrder[a.unlockType] ?? 99;
+            const categoryB = categoryOrder[b.unlockType] ?? 99;
+
+            if (categoryA !== categoryB) {
+                return categoryA - categoryB;
+            }
+
+            return a.displayName.localeCompare(b.displayName);
+        });
+    }
+
+    getUnlockCategoryLabel(unlockType) {
+        switch (unlockType) {
+            case "starter":
+                return "starter fish";
+            case "drop":
+                return "random drop unlocks";
+            case "coin":
+                return "coin unlocks";
+            case "gem":
+                return "gem unlocks";
+            default:
+                return "other unlocks";
+        }
+    }
+
+    isFishUnlocked(fishKey) {
+        return this.unlockedFishKeys[fishKey] === true;
+    }
+
+    getFishUnlockStatusText(fish) {
+        if (this.isFishUnlocked(fish.key)) {
+            return {
+                text: "unlocked",
+                color: "#55ff88"
+            };
+        }
+
+        if (fish.unlockType === "drop") {
+            const pieces = this.fishPieces[fish.key] || 0;
+
+            return {
+                text: `locked • pieces ${pieces}/${fish.piecesRequired}`,
+                color: "#d6d6d6"
+            };
+        }
+
+        if (fish.unlockType === "coin") {
+            return {
+                text: `locked • ${fish.price} gold`,
+                color: "#ffd76a"
+            };
+        }
+
+        if (fish.unlockType === "gem") {
+            return {
+                text: `locked • ${fish.price} gems`,
+                color: "#9be8ff"
+            };
+        }
+
+        return {
+            text: "locked",
+            color: "#d6d6d6"
+        };
     }
 
     useMedKit() {
