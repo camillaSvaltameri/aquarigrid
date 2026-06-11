@@ -13,6 +13,11 @@ class Swipe extends Phaser.Scene {
             if (fish.key !== "anchovy") {
                 this.load.image(fish.key, `./assets/${fish.file}`);
             }
+
+            this.load.image(
+                this.getFishOutlineKey(fish.key),
+                `./assets/${this.getFishOutlineFile(fish.file)}`
+            );
         }
 
         // Tile assets
@@ -41,7 +46,6 @@ class Swipe extends Phaser.Scene {
         this.load.image("spikesLow", "./assets/spikesLow.png");
         this.load.image("spikesDown", "./assets/spikesDown.png");
     }
-
     create() {
         this.boardImage = this.add.image(0, 0, "board").setOrigin(0, 0);
 
@@ -53,6 +57,12 @@ class Swipe extends Phaser.Scene {
         for (const fish of this.getFishDefinitions()) {
             if (this.textures.exists(fish.key)) {
                 this.textures.get(fish.key).setFilter(Phaser.Textures.FilterMode.NEAREST);
+            }
+
+            const outlineKey = this.getFishOutlineKey(fish.key);
+
+            if (this.textures.exists(outlineKey)) {
+                this.textures.get(outlineKey).setFilter(Phaser.Textures.FilterMode.NEAREST);
             }
         }
 
@@ -90,7 +100,7 @@ class Swipe extends Phaser.Scene {
             spikeMiddleHoldDelay: 180,
 
             turnUnlockDelay: 430,
-            levelTransitionDelay: 1200,
+            levelTransitionDelay: 3600,
 
             wormWiggleDelay: 350,
 
@@ -102,8 +112,8 @@ class Swipe extends Phaser.Scene {
         // -------------------------------
         this.grid = {
             centerX: 509,
-            centerY: 491,
-            cellSpacingX: 186,
+            centerY: 513,
+            cellSpacingX: 195,
             cellSpacingY: 197,
             rows: 3,
             cols: 3
@@ -191,13 +201,49 @@ class Swipe extends Phaser.Scene {
             }
         };
 
+        // chest rewards
+        this.chestRewardConfig = {
+            continueGemCost: 10,
+
+            dropWeights: {
+                gold: 45,
+                fishPieces: 30,
+                medKit: 10,
+                rock: 10,
+                gems: 5
+            },
+
+            goldDrop: {
+                min: 100,
+                max: 2500,
+                step: 100,
+                startWeight: 25,
+                minWeight: 1
+            },
+
+            gemDropValues: [
+                { value: 5, weight: 20 },
+                { value: 10, weight: 8 },
+                { value: 15, weight: 3 },
+                { value: 20, weight: 1 }
+            ],
+
+            fishPieceDropValues: [
+                { value: 1, weight: 12 },
+                { value: 2, weight: 9 },
+                { value: 3, weight: 5 },
+                { value: 4, weight: 2 },
+                { value: 5, weight: 1 }
+            ]
+        };
+
         // -------------------------------
         // PERSISTENT / RUN STATE
         // -------------------------------
         this.currentLevel = 1;
 
         this.goldCount = 1000;
-        this.gemCount = 50;
+        this.gemCount = 5000;
 
         //ACTUAL GAMEPLAY VALUES
         //this.medKitCount = 5;
@@ -235,6 +281,7 @@ class Swipe extends Phaser.Scene {
         this.levelEnded = false;
         this.menuOpen = false;
         this.unlockMenuOpen = false;
+        this.failChoiceOpen = false;
         this.unlockScrollY = 0;
         this.unlockMaxScroll = 0;
         this.turnCount = 0;
@@ -305,7 +352,11 @@ class Swipe extends Phaser.Scene {
             left: Phaser.Input.Keyboard.KeyCodes.A,
             right: Phaser.Input.Keyboard.KeyCodes.D,
             enter: Phaser.Input.Keyboard.KeyCodes.ENTER,
-            u: Phaser.Input.Keyboard.KeyCodes.U
+            u: Phaser.Input.Keyboard.KeyCodes.U,
+            c: Phaser.Input.Keyboard.KeyCodes.C,
+            r: Phaser.Input.Keyboard.KeyCodes.R,
+            y: Phaser.Input.Keyboard.KeyCodes.Y,
+            n: Phaser.Input.Keyboard.KeyCodes.N
         });
 
         this.input.on("wheel", (pointer, gameObjects, deltaX, deltaY) => {
@@ -320,6 +371,29 @@ class Swipe extends Phaser.Scene {
     }
 
     update() {
+        if (this.failChoiceOpen) {
+            if (Phaser.Input.Keyboard.JustDown(this.keys.c)) {
+                this.continueAfterFailure();
+            } else if (Phaser.Input.Keyboard.JustDown(this.keys.r)) {
+                this.retryAfterFailure();
+            }
+
+            return;
+        }
+
+        if (this.purchaseConfirmOpen) {
+            if (Phaser.Input.Keyboard.JustDown(this.keys.y)) {
+                this.confirmFishPurchase();
+            } else if (
+                Phaser.Input.Keyboard.JustDown(this.keys.n) ||
+                Phaser.Input.Keyboard.JustDown(this.keys.enter)
+            ) {
+                this.cancelFishPurchase();
+            }
+
+            return;
+        }
+
         if (this.menuOpen) {
             if (Phaser.Input.Keyboard.JustDown(this.keys.u)) {
                 if (this.unlockMenuOpen) {
@@ -679,7 +753,9 @@ class Swipe extends Phaser.Scene {
         const rowHeight = 86;
 
         for (const fish of fishList) {
-            const categoryLabel = this.getUnlockCategoryLabel(fish.unlockType);
+            const categoryLabel = this.getUnlockCategoryLabel(
+                this.getFishMenuCategory(fish)
+            );
 
             if (categoryLabel !== currentCategory) {
                 currentCategory = categoryLabel;
@@ -715,8 +791,14 @@ class Swipe extends Phaser.Scene {
             );
 
             rowPanel.setStrokeStyle(2, 0xffffff, 0.18);
+            rowPanel.setInteractive({ useHandCursor: true });
 
-            const fishSprite = this.add.image(36, 2, fish.key);
+            const fishSprite = this.add.image(
+                36,
+                2,
+                this.getFishMenuTextureKey(fish)
+            );
+
             fishSprite.setScale(5);
 
             const nameText = this.add.text(
@@ -751,6 +833,18 @@ class Swipe extends Phaser.Scene {
 
             statusText.setOrigin(0, 0.5);
 
+            rowPanel.on("pointerover", () => {
+                fishSprite.setTexture(this.getFishOutlineTextureKey(fish.key));
+            });
+
+            rowPanel.on("pointerout", () => {
+                fishSprite.setTexture(this.getFishMenuTextureKey(fish));
+            });
+
+            rowPanel.on("pointerdown", () => {
+                this.handleFishClick(fish);
+            });
+
             rowContainer.add([rowPanel, fishSprite, nameText, statusText]);
             this.unlockListContainer.add(rowContainer);
 
@@ -763,6 +857,10 @@ class Swipe extends Phaser.Scene {
     }
 
     closeUnlockMenu() {
+        if (this.purchaseConfirmOpen) {
+            this.cancelFishPurchase();
+        }
+
         this.unlockMenuOpen = false;
 
         if (this.unlockListContainer) {
@@ -802,6 +900,236 @@ class Swipe extends Phaser.Scene {
         this.unlockListContainer.y = -205 - this.unlockScrollY;
     }
 
+    getFishOutlineKey(fishKey) {
+        return `${fishKey}Outline`;
+    }
+
+    getFishOutlineFile(fileName) {
+        return fileName.replace(".png", " Outline.png");
+    }
+
+    getFishOutlineTextureKey(fishKey) {
+        const outlineKey = this.getFishOutlineKey(fishKey);
+
+        if (this.textures.exists(outlineKey)) {
+            return outlineKey;
+        }
+
+        return fishKey;
+    }
+
+    getFishMenuTextureKey(fish) {
+        if (fish.key === this.currentFishKey) {
+            return this.getFishOutlineTextureKey(fish.key);
+        }
+
+        return fish.key;
+    }
+
+    handleFishClick(fish) {
+        if (this.isFishUnlocked(fish.key)) {
+            this.selectFish(fish.key);
+            return;
+        }
+
+        if (!this.isFishRequirementMet(fish)) {
+            this.showChestRewardMessage(`Requires ${this.getFishDisplayNameByKey(fish.requires)}`);
+            return;
+        }
+
+        if (fish.unlockType === "gem") {
+            this.openFishPurchaseConfirm(fish);
+            return;
+        }
+
+        if (fish.unlockType === "drop") {
+            const pieces = this.fishPieces[fish.key] || 0;
+            this.showChestRewardMessage(`${fish.displayName}: ${pieces}/${fish.piecesRequired} pieces`);
+            return;
+        }
+
+        this.showChestRewardMessage("Fish is locked");
+    }
+
+    selectFish(fishKey) {
+        if (!this.isFishUnlocked(fishKey)) {
+            return;
+        }
+
+        this.currentFishKey = fishKey;
+
+        if (this.player) {
+            this.player.setTexture(this.currentFishKey);
+        }
+
+        if (this.unlockMenuOpen) {
+            this.populateUnlockList();
+        }
+
+        this.showChestRewardMessage(`Selected ${this.getFishDisplayNameByKey(fishKey)}`);
+    }
+
+    openFishPurchaseConfirm(fish) {
+        if (this.purchaseConfirmOpen) {
+            this.cancelFishPurchase();
+        }
+
+        this.purchaseConfirmOpen = true;
+        this.pendingPurchaseFish = fish;
+
+        const centerX = this.game.config.width / 2;
+        const centerY = this.game.config.height / 2;
+
+        this.purchaseConfirmOverlay = this.add.container(centerX, centerY);
+        this.purchaseConfirmOverlay.setDepth(720);
+
+        const panel = this.add.rectangle(
+            0,
+            0,
+            610,
+            270,
+            0x000000,
+            0.78
+        );
+
+        panel.setStrokeStyle(3, 0xffffff, 0.24);
+
+        const promptText = this.add.text(
+            0,
+            -62,
+            `Purchase ${fish.displayName}\nfor ${fish.price} gems?`,
+            {
+                fontFamily: "Arial",
+                fontSize: "28px",
+                color: "#ffffff",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 6
+            }
+        );
+
+        promptText.setOrigin(0.5);
+
+        const helperText = this.add.text(
+            0,
+            98,
+            "press Y for yes • press N for no",
+            {
+                fontFamily: "Arial",
+                fontSize: "17px",
+                color: "#d6d6d6",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 4
+            }
+        );
+
+        helperText.setOrigin(0.5);
+
+        const yesButton = this.createConfirmButton(
+            -105,
+            35,
+            "yes",
+            "#55ff88",
+            () => {
+                this.confirmFishPurchase();
+            }
+        );
+
+        const noButton = this.createConfirmButton(
+            105,
+            35,
+            "no",
+            "#ffb0b0",
+            () => {
+                this.cancelFishPurchase();
+            }
+        );
+
+        this.purchaseConfirmOverlay.add([
+            panel,
+            promptText,
+            yesButton,
+            noButton,
+            helperText
+        ]);
+    }
+
+    createConfirmButton(x, y, label, color, callback) {
+        const button = this.add.container(x, y);
+
+        const bg = this.add.rectangle(
+            0,
+            0,
+            150,
+            54,
+            0x000000,
+            0.42
+        );
+
+        bg.setStrokeStyle(2, 0xffffff, 0.24);
+        bg.setInteractive({ useHandCursor: true });
+
+        const text = this.add.text(
+            0,
+            0,
+            label,
+            {
+                fontFamily: "Arial",
+                fontSize: "24px",
+                color: color,
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 5
+            }
+        );
+
+        text.setOrigin(0.5);
+
+        bg.on("pointerdown", callback);
+
+        button.add([bg, text]);
+
+        return button;
+    }
+
+    confirmFishPurchase() {
+        const fish = this.pendingPurchaseFish;
+
+        if (!fish) {
+            this.cancelFishPurchase();
+            return;
+        }
+
+        if (this.gemCount < fish.price) {
+            this.cancelFishPurchase();
+            this.showChestRewardMessage("Not enough gems");
+            return;
+        }
+
+        this.gemCount -= fish.price;
+        this.unlockedFishKeys[fish.key] = true;
+
+        this.cancelFishPurchase();
+        this.updateUI();
+
+        if (this.unlockMenuOpen) {
+            this.populateUnlockList();
+        }
+
+        this.showChestRewardMessage(`Purchase successful: ${fish.displayName}`);
+    }
+
+    cancelFishPurchase() {
+        this.purchaseConfirmOpen = false;
+        this.pendingPurchaseFish = null;
+
+        if (this.purchaseConfirmOverlay) {
+            this.purchaseConfirmOverlay.destroy();
+            this.purchaseConfirmOverlay = null;
+        }
+    }
+
     getFishDefinitions() {
         return [
             {
@@ -826,10 +1154,10 @@ class Swipe extends Phaser.Scene {
                 key: "anglerfish",
                 file: "Anglerfish.png",
                 displayName: "Anglerfish",
-                unlockType: "drop",
-                piecesRequired: 10,
-                dropWeight: 10,
-                price: 0
+                unlockType: "gem",
+                piecesRequired: 0,
+                dropWeight: 0,
+                price: 350
             },
             {
                 key: "bass",
@@ -847,7 +1175,8 @@ class Swipe extends Phaser.Scene {
                 unlockType: "drop",
                 piecesRequired: 10,
                 dropWeight: 10,
-                price: 0
+                price: 0,
+                requires: "angelfish"
             },
             {
                 key: "bluegill",
@@ -871,10 +1200,10 @@ class Swipe extends Phaser.Scene {
                 key: "catfish",
                 file: "Catfish.png",
                 displayName: "Catfish",
-                unlockType: "drop",
-                piecesRequired: 10,
-                dropWeight: 10,
-                price: 0
+                unlockType: "gem",
+                piecesRequired: 0,
+                dropWeight: 0,
+                price: 150
             },
             {
                 key: "clownfish",
@@ -898,10 +1227,10 @@ class Swipe extends Phaser.Scene {
                 key: "crab",
                 file: "Crab.png",
                 displayName: "Crab",
-                unlockType: "drop",
-                piecesRequired: 10,
-                dropWeight: 10,
-                price: 0
+                unlockType: "gem",
+                piecesRequired: 0,
+                dropWeight: 0,
+                price: 200
             },
             {
                 key: "flounder",
@@ -961,6 +1290,15 @@ class Swipe extends Phaser.Scene {
                 key: "jellyfish",
                 file: "Jellyfish.png",
                 displayName: "Jellyfish",
+                unlockType: "gem",
+                piecesRequired: 0,
+                dropWeight: 0,
+                price: 250
+            },
+            {
+                key: "minnow",
+                file: "Minnow.png",
+                displayName: "Minnow",
                 unlockType: "drop",
                 piecesRequired: 10,
                 dropWeight: 10,
@@ -1006,10 +1344,10 @@ class Swipe extends Phaser.Scene {
                 key: "pufferfish",
                 file: "Pufferfish.png",
                 displayName: "Pufferfish",
-                unlockType: "drop",
-                piecesRequired: 10,
-                dropWeight: 10,
-                price: 0
+                unlockType: "gem",
+                piecesRequired: 0,
+                dropWeight: 0,
+                price: 300
             },
             {
                 key: "purpleTang",
@@ -1018,16 +1356,17 @@ class Swipe extends Phaser.Scene {
                 unlockType: "drop",
                 piecesRequired: 10,
                 dropWeight: 10,
-                price: 0
+                price: 0,
+                requires: "yellowTang"
             },
             {
                 key: "rainbowTrout",
                 file: "RainbowTrout.png",
                 displayName: "Rainbow Trout",
-                unlockType: "drop",
-                piecesRequired: 10,
-                dropWeight: 10,
-                price: 0
+                unlockType: "gem",
+                piecesRequired: 0,
+                dropWeight: 0,
+                price: 400
             },
             {
                 key: "ribbonEel",
@@ -1036,7 +1375,8 @@ class Swipe extends Phaser.Scene {
                 unlockType: "drop",
                 piecesRequired: 10,
                 dropWeight: 10,
-                price: 0
+                price: 0,
+                requires: "morayEel"
             },
             {
                 key: "seahorse",
@@ -1057,31 +1397,22 @@ class Swipe extends Phaser.Scene {
                 price: 0
             },
             {
-                key: "silverjawMinnow",
-                file: "SilverjawMinnow.png",
-                displayName: "Silverjaw Minnow",
-                unlockType: "drop",
-                piecesRequired: 10,
-                dropWeight: 10,
-                price: 0
-            },
-            {
                 key: "starfish",
                 file: "Starfish.png",
                 displayName: "Starfish",
-                unlockType: "drop",
-                piecesRequired: 10,
-                dropWeight: 10,
-                price: 0
+                unlockType: "gem",
+                piecesRequired: 0,
+                dropWeight: 0,
+                price: 150
             },
             {
                 key: "stingray",
                 file: "Stingray.png",
                 displayName: "Stingray",
-                unlockType: "drop",
-                piecesRequired: 10,
-                dropWeight: 10,
-                price: 0
+                unlockType: "gem",
+                piecesRequired: 0,
+                dropWeight: 0,
+                price: 450
             },
             {
                 key: "surgeonfish",
@@ -1096,10 +1427,10 @@ class Swipe extends Phaser.Scene {
                 key: "tadpole",
                 file: "Tadpole.png",
                 displayName: "Tadpole",
-                unlockType: "drop",
-                piecesRequired: 10,
-                dropWeight: 10,
-                price: 0
+                unlockType: "gem",
+                piecesRequired: 0,
+                dropWeight: 0,
+                price: 100
             },
             {
                 key: "tuna",
@@ -1114,10 +1445,11 @@ class Swipe extends Phaser.Scene {
                 key: "upsideDownJellyfish",
                 file: "UpsideDownJellyfish.png",
                 displayName: "Upside Down Jellyfish",
-                unlockType: "drop",
-                piecesRequired: 10,
-                dropWeight: 10,
-                price: 0
+                unlockType: "gem",
+                piecesRequired: 0,
+                dropWeight: 0,
+                price: 500,
+                requires: "jellyfish"
             },
             {
                 key: "yellowTang",
@@ -1133,15 +1465,17 @@ class Swipe extends Phaser.Scene {
 
     getSortedFishDefinitions() {
         const categoryOrder = {
-            starter: 0,
+            unlocked: 0,
             drop: 1,
-            coin: 2,
-            gem: 3
+            gem: 2,
+            coin: 3,
+            requirement: 4,
+            other: 5
         };
 
         return [...this.getFishDefinitions()].sort((a, b) => {
-            const categoryA = categoryOrder[a.unlockType] ?? 99;
-            const categoryB = categoryOrder[b.unlockType] ?? 99;
+            const categoryA = categoryOrder[this.getFishMenuCategory(a)] ?? 99;
+            const categoryB = categoryOrder[this.getFishMenuCategory(b)] ?? 99;
 
             if (categoryA !== categoryB) {
                 return categoryA - categoryB;
@@ -1151,16 +1485,42 @@ class Swipe extends Phaser.Scene {
         });
     }
 
-    getUnlockCategoryLabel(unlockType) {
-        switch (unlockType) {
-            case "starter":
+    getFishMenuCategory(fish) {
+        if (this.isFishUnlocked(fish.key)) {
+            return "unlocked";
+        }
+
+        if (!this.isFishRequirementMet(fish)) {
+            return "requirement";
+        }
+
+        if (fish.unlockType === "drop") {
+            return "drop";
+        }
+
+        if (fish.unlockType === "gem") {
+            return "gem";
+        }
+
+        if (fish.unlockType === "coin") {
+            return "coin";
+        }
+
+        return "other";
+    }
+
+    getUnlockCategoryLabel(category) {
+        switch (category) {
+            case "unlocked":
                 return "unlocked fish";
             case "drop":
                 return "random drop unlocks";
-            case "coin":
-                return "coin unlocks";
             case "gem":
                 return "gem unlocks";
+            case "coin":
+                return "coin unlocks";
+            case "requirement":
+                return "locked by requirement";
             default:
                 return "other unlocks";
         }
@@ -1170,11 +1530,45 @@ class Swipe extends Phaser.Scene {
         return this.unlockedFishKeys[fishKey] === true;
     }
 
+    isFishRequirementMet(fish) {
+        if (!fish.requires) {
+            return true;
+        }
+
+        return this.isFishUnlocked(fish.requires);
+    }
+
+    getFishDisplayNameByKey(fishKey) {
+        const fish = this.getFishDefinitions().find((entry) => {
+            return entry.key === fishKey;
+        });
+
+        if (!fish) {
+            return fishKey;
+        }
+
+        return fish.displayName;
+    }
+
     getFishUnlockStatusText(fish) {
         if (this.isFishUnlocked(fish.key)) {
+            if (fish.key === this.currentFishKey) {
+                return {
+                    text: "selected",
+                    color: "#55ff88"
+                };
+            }
+
             return {
-                text: "unlocked",
+                text: "unlocked • click to select",
                 color: "#55ff88"
+            };
+        }
+
+        if (!this.isFishRequirementMet(fish)) {
+            return {
+                text: `locked • requires ${this.getFishDisplayNameByKey(fish.requires)}`,
+                color: "#ffb0b0"
             };
         }
 
@@ -1196,7 +1590,7 @@ class Swipe extends Phaser.Scene {
 
         if (fish.unlockType === "gem") {
             return {
-                text: `locked • ${fish.price} gems`,
+                text: `locked • ${fish.price} gems • click to buy`,
                 color: "#9be8ff"
             };
         }
@@ -1205,6 +1599,42 @@ class Swipe extends Phaser.Scene {
             text: "locked",
             color: "#d6d6d6"
         };
+    }
+    getEligiblePieceFish() {
+        return this.getFishDefinitions().filter((fish) => {
+            const pieces = this.fishPieces[fish.key] || 0;
+
+            return (
+                fish.unlockType === "drop" &&
+                !this.isFishUnlocked(fish.key) &&
+                this.isFishRequirementMet(fish) &&
+                pieces < fish.piecesRequired
+            );
+        });
+    }
+
+    pickWeightedFish(fishList) {
+        let totalWeight = 0;
+
+        for (const fish of fishList) {
+            totalWeight += fish.dropWeight;
+        }
+
+        if (totalWeight <= 0) {
+            return fishList[0];
+        }
+
+        let roll = Math.random() * totalWeight;
+
+        for (const fish of fishList) {
+            roll -= fish.dropWeight;
+
+            if (roll <= 0) {
+                return fish;
+            }
+        }
+
+        return fishList[0];
     }
 
     useMedKit() {
@@ -1402,7 +1832,10 @@ class Swipe extends Phaser.Scene {
         this.levelEnded = true;
         this.isMoving = true;
 
-        this.showLevelResult("LEVEL COMPLETE");
+        const rewardLines = this.openLevelChests();
+
+        this.showLevelResult("LEVEL COMPLETE", rewardLines);
+        this.updateUI();
 
         this.time.delayedCall(this.timing.levelTransitionDelay, () => {
             this.currentLevel++;
@@ -1413,15 +1846,45 @@ class Swipe extends Phaser.Scene {
     failLevel() {
         this.levelEnded = true;
         this.isMoving = true;
+        this.failChoiceOpen = true;
 
-        this.showLevelResult("LEVEL FAILED");
-
-        this.time.delayedCall(this.timing.levelTransitionDelay, () => {
-            this.restartLevelState();
-        });
+        this.showLevelResult("LEVEL FAILED", [
+            `you collected ${this.chestsCollected}/${this.levelConfig.maxChests} chests`,
+            "retrying will lose all collected chests",
+            `press C to continue for ${this.chestRewardConfig.continueGemCost} gems`,
+            "press R to retry this level"
+        ]);
     }
 
-    showLevelResult(message) {
+    continueAfterFailure() {
+        if (this.gemCount < this.chestRewardConfig.continueGemCost) {
+            this.showChestRewardMessage("Not enough gems to continue");
+            return;
+        }
+
+        this.gemCount -= this.chestRewardConfig.continueGemCost;
+        this.playerHealth = this.playerMaxHealth;
+        this.updateHealthText();
+
+        this.failChoiceOpen = false;
+        this.levelEnded = false;
+        this.isMoving = false;
+
+        if (this.levelResultOverlay) {
+            this.levelResultOverlay.destroy();
+            this.levelResultOverlay = null;
+        }
+
+        this.updateUI();
+        this.showChestRewardMessage("Continued with full health");
+    }
+
+    retryAfterFailure() {
+        this.failChoiceOpen = false;
+        this.restartLevelState();
+    }
+
+    showLevelResult(message, detailLines = []) {
         if (this.levelResultOverlay) {
             this.levelResultOverlay.destroy();
         }
@@ -1444,7 +1907,7 @@ class Swipe extends Phaser.Scene {
 
         const resultText = this.add.text(
             0,
-            0,
+            -95,
             message,
             {
                 fontFamily: "Arial",
@@ -1457,7 +1920,23 @@ class Swipe extends Phaser.Scene {
 
         resultText.setOrigin(0.5);
 
-        this.levelResultOverlay.add([overlay, resultText]);
+        const detailText = this.add.text(
+            0,
+            25,
+            detailLines.join("\n"),
+            {
+                fontFamily: "Arial",
+                fontSize: "22px",
+                color: "#ffffff",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 5
+            }
+        );
+
+        detailText.setOrigin(0.5);
+
+        this.levelResultOverlay.add([overlay, resultText, detailText]);
     }
 
     restartLevelState() {
@@ -1485,6 +1964,7 @@ class Swipe extends Phaser.Scene {
 
         this.levelEnded = false;
         this.isMoving = false;
+        this.failChoiceOpen = false;
         this.turnCount = 0;
 
         this.chestsSpawned = 0;
@@ -1766,6 +2246,30 @@ class Swipe extends Phaser.Scene {
         return weightedValues[0].value;
     }
 
+    pickWeightedKey(weights) {
+        let totalWeight = 0;
+
+        for (const key in weights) {
+            totalWeight += weights[key];
+        }
+
+        if (totalWeight <= 0) {
+            return "gold";
+        }
+
+        let roll = Math.random() * totalWeight;
+
+        for (const key in weights) {
+            roll -= weights[key];
+
+            if (roll <= 0) {
+                return key;
+            }
+        }
+
+        return "gold";
+    }
+
     getTextureForTileType(type) {
         switch (type) {
             case "worm":
@@ -1838,7 +2342,7 @@ class Swipe extends Phaser.Scene {
 
         if (tile.type === "loot") {
             this.chestsCollected++;
-            console.log(`Chests collected: ${this.chestsCollected}/${this.levelConfig.maxChests}`);
+            console.log(`Pending chests: ${this.chestsCollected}/${this.levelConfig.maxChests}`);
             this.updateUI();
         }
 
@@ -1867,6 +2371,187 @@ class Swipe extends Phaser.Scene {
                 }
             });
         }
+    }
+
+    openLevelChests() {
+        const rewardLines = [];
+
+        if (this.chestsCollected <= 0) {
+            rewardLines.push("no chests opened");
+            return rewardLines;
+        }
+
+        rewardLines.push(`opened ${this.chestsCollected} chest${this.chestsCollected === 1 ? "" : "s"}`);
+
+        for (let i = 0; i < this.chestsCollected; i++) {
+            rewardLines.push(this.rollChestReward());
+        }
+
+        if (this.unlockMenuOpen) {
+            this.populateUnlockList();
+        }
+
+        return rewardLines;
+    }
+
+    rollChestReward() {
+        const weights = this.getAdjustedChestDropWeights();
+        const rewardType = this.pickWeightedKey(weights);
+
+        switch (rewardType) {
+            case "gold":
+                return this.rewardGold();
+            case "gems":
+                return this.rewardGems();
+            case "fishPieces":
+                return this.rewardFishPieces();
+            case "medKit":
+                return this.rewardMedKit();
+            case "rock":
+                return this.rewardRock();
+            default:
+                return this.rewardGold();
+        }
+    }
+
+    getAdjustedChestDropWeights() {
+        const weights = { ...this.chestRewardConfig.dropWeights };
+
+        if (this.getEligiblePieceFish().length <= 0) {
+            weights.fishPieces = 0;
+        }
+
+        return weights;
+    }
+
+    rewardGold() {
+        const amount = this.getGoldDropAmount();
+
+        this.goldCount += amount;
+        return `+${amount} gold`;
+    }
+
+    rewardGems() {
+        const amount = this.pickWeightedValue(this.chestRewardConfig.gemDropValues);
+
+        this.gemCount += amount;
+        return `+${amount} gems`;
+    }
+
+    rewardMedKit() {
+        this.medKitCount++;
+        return "+1 medkit";
+    }
+
+    rewardRock() {
+        this.rockCount++;
+        return "+1 rock";
+    }
+
+    rewardFishPieces() {
+        const eligibleFish = this.getEligiblePieceFish();
+
+        if (eligibleFish.length <= 0) {
+            return this.rewardGold();
+        }
+
+        const fish = this.pickWeightedFish(eligibleFish);
+        const amount = this.pickWeightedValue(this.chestRewardConfig.fishPieceDropValues);
+        const currentPieces = this.fishPieces[fish.key] || 0;
+        const newPieces = Phaser.Math.Clamp(
+            currentPieces + amount,
+            0,
+            fish.piecesRequired
+        );
+
+        this.fishPieces[fish.key] = newPieces;
+
+        if (newPieces >= fish.piecesRequired) {
+            this.unlockedFishKeys[fish.key] = true;
+            return `unlocked ${fish.displayName}!`;
+        }
+
+        return `+${amount} ${fish.displayName} pieces`;
+    }
+
+    getGoldDropAmount() {
+        const values = [];
+        let index = 0;
+
+        for (
+            let value = this.chestRewardConfig.goldDrop.min;
+            value <= this.chestRewardConfig.goldDrop.max;
+            value += this.chestRewardConfig.goldDrop.step
+        ) {
+            values.push({
+                value: value,
+                weight: Math.max(
+                    this.chestRewardConfig.goldDrop.minWeight,
+                    this.chestRewardConfig.goldDrop.startWeight - index
+                )
+            });
+
+            index++;
+        }
+
+        return this.pickWeightedValue(values);
+    }
+
+    showChestRewardMessage(message) {
+        if (this.chestRewardToast) {
+            this.chestRewardToast.destroy();
+        }
+
+        this.chestRewardToast = this.add.container(
+            this.game.config.width / 2,
+            160
+        );
+
+        this.chestRewardToast.setDepth(this.menuOpen ? 760 : 420);
+
+        const bg = this.add.rectangle(
+            0,
+            0,
+            520,
+            58,
+            0x000000,
+            0.42
+        );
+
+        bg.setStrokeStyle(2, 0xffffff, 0.22);
+
+        const text = this.add.text(
+            0,
+            0,
+            message,
+            {
+                fontFamily: "Arial",
+                fontSize: "22px",
+                color: "#ffffff",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 5
+            }
+        );
+
+        text.setOrigin(0.5);
+
+        this.chestRewardToast.add([bg, text]);
+
+        this.tweens.add({
+            targets: this.chestRewardToast,
+            alpha: 0,
+            y: 135,
+            duration: 900,
+            delay: 900,
+            ease: "Sine.easeIn",
+            onComplete: () => {
+                if (this.chestRewardToast) {
+                    this.chestRewardToast.destroy();
+                    this.chestRewardToast = null;
+                }
+            }
+        });
     }
 
     getEffectiveDamage(tile) {
