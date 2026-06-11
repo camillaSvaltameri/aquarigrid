@@ -19,6 +19,9 @@ class Swipe extends Phaser.Scene {
         this.load.image("uiPanel", "./assets/UIpanel.png");
         this.load.image("medKit", "./assets/medKit.png");
         this.load.image("rock", "./assets/rock.png");
+        this.load.image("gold", "./assets/gold.png");
+        this.load.image("gem", "./assets/gem.png");
+        this.load.image("menu", "./assets/menu.png");
 
         // Enemy assets
         this.load.image("enemyCan", "./assets/enemyCan.png");
@@ -47,6 +50,9 @@ class Swipe extends Phaser.Scene {
         this.textures.get("uiPanel").setFilter(Phaser.Textures.FilterMode.NEAREST);
         this.textures.get("medKit").setFilter(Phaser.Textures.FilterMode.NEAREST);
         this.textures.get("rock").setFilter(Phaser.Textures.FilterMode.NEAREST);
+        this.textures.get("gold").setFilter(Phaser.Textures.FilterMode.NEAREST);
+        this.textures.get("gem").setFilter(Phaser.Textures.FilterMode.NEAREST);
+        this.textures.get("menu").setFilter(Phaser.Textures.FilterMode.NEAREST);
 
         this.textures.get("enemyCan").setFilter(Phaser.Textures.FilterMode.NEAREST);
         this.textures.get("enemyLure").setFilter(Phaser.Textures.FilterMode.NEAREST);
@@ -69,6 +75,7 @@ class Swipe extends Phaser.Scene {
             spikeMiddleHoldDelay: 180,
 
             turnUnlockDelay: 430,
+            levelTransitionDelay: 1200,
 
             wormWiggleDelay: 350,
 
@@ -170,7 +177,23 @@ class Swipe extends Phaser.Scene {
         };
 
         // -------------------------------
-        // GAME STATE
+        // PERSISTENT / RUN STATE
+        // -------------------------------
+        this.currentLevel = 1;
+
+        this.goldCount = 1000;
+        this.gemCount = 50;
+
+        //ACTUAL GAMEPLAY VALUES
+        //this.medKitCount = 5;
+        //this.rockCount = 5;
+        
+        //DEBUG ONLY
+        this.medKitCount = 100;
+        this.rockCount = 100;
+
+        // -------------------------------
+        // LEVEL STATE
         // -------------------------------
         this.playerHealth = 20;
         this.playerMaxHealth = 25;
@@ -181,17 +204,12 @@ class Swipe extends Phaser.Scene {
         };
 
         this.levelEnded = false;
+        this.menuOpen = false;
         this.turnCount = 0;
 
         this.chestsSpawned = 0;
         this.chestsCollected = 0;
-
         this.keyCollected = 0;
-
-        // persistent inventory values
-        // NOTE: later could be loaded from another scene or global save object
-        this.medKitCount = 5;
-        this.rockCount = 5;
 
         this.rockShieldActive = false;
         this.rockShieldSprite = null;
@@ -253,7 +271,8 @@ class Swipe extends Phaser.Scene {
             up: Phaser.Input.Keyboard.KeyCodes.W,
             down: Phaser.Input.Keyboard.KeyCodes.S,
             left: Phaser.Input.Keyboard.KeyCodes.A,
-            right: Phaser.Input.Keyboard.KeyCodes.D
+            right: Phaser.Input.Keyboard.KeyCodes.D,
+            enter: Phaser.Input.Keyboard.KeyCodes.ENTER
         });
 
         this.isMoving = false;
@@ -262,6 +281,14 @@ class Swipe extends Phaser.Scene {
     }
 
     update() {
+        if (this.menuOpen) {
+            if (Phaser.Input.Keyboard.JustDown(this.keys.enter)) {
+                this.closeMenu();
+            }
+
+            return;
+        }
+
         if (this.isMoving || this.levelEnded) {
             return;
         }
@@ -293,12 +320,60 @@ class Swipe extends Phaser.Scene {
     // -------------------------------
 
     createUI() {
+        this.levelText = this.add.text(
+            32,
+            30,
+            `Level ${this.currentLevel}`,
+            {
+                fontFamily: "Arial",
+                fontSize: "34px",
+                color: "#ffffff",
+                stroke: "#000000",
+                strokeThickness: 7
+            }
+        );
+
+        this.levelText.setDepth(200);
+
+        this.goldUI = this.createCounterPanel({
+            x: this.game.config.width / 2 - 105,
+            y: 90,
+            iconKey: "gold",
+            text: `${this.goldCount}`,
+            side: "left",
+            panelWidth: 190
+        });
+
+        this.gemUI = this.createCounterPanel({
+            x: this.game.config.width / 2 + 105,
+            y: 90,
+            iconKey: "gem",
+            text: `${this.gemCount}`,
+            side: "left",
+            panelWidth: 170
+        });
+
+        this.menuButton = this.add.image(
+            this.game.config.width - 55,
+            55,
+            "menu"
+        );
+
+        this.menuButton.setDepth(210);
+        this.fitSpriteToCell(this.menuButton, 58, 58);
+        this.menuButton.setInteractive({ useHandCursor: true });
+
+        this.menuButton.on("pointerdown", () => {
+            this.openMenu();
+        });
+
         this.medKitUI = this.createCounterPanel({
             x: 115,
             y: this.game.config.height - 135,
             iconKey: "medKit",
             text: `${this.medKitCount}`,
-            side: "left"
+            side: "left",
+            panelWidth: 180
         });
 
         this.rockUI = this.createCounterPanel({
@@ -306,7 +381,8 @@ class Swipe extends Phaser.Scene {
             y: this.game.config.height - 70,
             iconKey: "rock",
             text: `${this.rockCount}`,
-            side: "left"
+            side: "left",
+            panelWidth: 180
         });
 
         this.chestUI = this.createCounterPanel({
@@ -314,7 +390,8 @@ class Swipe extends Phaser.Scene {
             y: this.game.config.height - 135,
             iconKey: "loot",
             text: `${this.chestsCollected}/${this.levelConfig.maxChests}`,
-            side: "right"
+            side: "right",
+            panelWidth: 180
         });
 
         this.keyUI = this.createCounterPanel({
@@ -322,7 +399,8 @@ class Swipe extends Phaser.Scene {
             y: this.game.config.height - 70,
             iconKey: "key",
             text: `${this.keyCollected}/1`,
-            side: "right"
+            side: "right",
+            panelWidth: 180
         });
 
         this.medKitUI.container.setInteractive(
@@ -348,12 +426,14 @@ class Swipe extends Phaser.Scene {
         const container = this.add.container(config.x, config.y);
         container.setDepth(200);
 
+        const panelWidth = config.panelWidth || 180;
+
         const panel = this.add.image(0, 0, "uiPanel");
-        panel.setDisplaySize(180, 56);
+        panel.setDisplaySize(panelWidth, 56);
         panel.setAlpha(0.78);
 
-        const iconX = config.side === "right" ? -55 : -55;
-        const textX = config.side === "right" ? 20 : 20;
+        const iconX = -panelWidth / 2 + 35;
+        const textX = -panelWidth / 2 + 72;
 
         const icon = this.add.image(iconX, 0, config.iconKey);
         this.fitSpriteToCell(icon, 46, 46);
@@ -384,14 +464,71 @@ class Swipe extends Phaser.Scene {
     }
 
     updateUI() {
+        this.levelText.setText(`Level ${this.currentLevel}`);
+
+        this.goldUI.text.setText(`${this.goldCount}`);
+        this.gemUI.text.setText(`${this.gemCount}`);
+
         this.medKitUI.text.setText(`${this.medKitCount}`);
         this.rockUI.text.setText(`${this.rockCount}`);
+
         this.chestUI.text.setText(`${this.chestsCollected}/${this.levelConfig.maxChests}`);
         this.keyUI.text.setText(`${this.keyCollected}/1`);
     }
 
+    openMenu() {
+        if (this.menuOpen) {
+            return;
+        }
+
+        this.menuOpen = true;
+
+        this.menuOverlay = this.add.container(
+            this.game.config.width / 2,
+            this.game.config.height / 2
+        );
+
+        this.menuOverlay.setDepth(500);
+
+        const backdrop = this.add.rectangle(
+            0,
+            0,
+            this.game.config.width,
+            this.game.config.height,
+            0x000000,
+            0.45
+        );
+
+        const menuText = this.add.text(
+            0,
+            0,
+            "MENU\n\nPress ENTER to go back",
+            {
+                fontFamily: "Arial",
+                fontSize: "42px",
+                color: "#ffffff",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 8
+            }
+        );
+
+        menuText.setOrigin(0.5);
+
+        this.menuOverlay.add([backdrop, menuText]);
+    }
+
+    closeMenu() {
+        this.menuOpen = false;
+
+        if (this.menuOverlay) {
+            this.menuOverlay.destroy();
+            this.menuOverlay = null;
+        }
+    }
+
     useMedKit() {
-        if (this.levelEnded || this.isMoving) {
+        if (this.levelEnded || this.isMoving || this.menuOpen) {
             return;
         }
 
@@ -408,12 +545,12 @@ class Swipe extends Phaser.Scene {
         this.updateUI();
 
         this.flyItemToPlayer("medKit", this.medKitUI.icon, () => {
-            // !! placeholder for later sparkle/heal animation!!!!!
+            // Placeholder for later sparkle/heal animation.
         });
     }
 
     useRock() {
-        if (this.levelEnded || this.isMoving) {
+        if (this.levelEnded || this.isMoving || this.menuOpen) {
             return;
         }
 
@@ -506,6 +643,10 @@ class Swipe extends Phaser.Scene {
         };
     }
 
+    // -------------------------------
+    // PLAYER MOVEMENT
+    // -------------------------------
+
     tryMove(rowChange, colChange) {
         const oldRow = this.playerGridPos.row;
         const oldCol = this.playerGridPos.col;
@@ -535,6 +676,8 @@ class Swipe extends Phaser.Scene {
             this.board[newRow][newCol] = null;
         }
 
+        const playerDied = this.playerHealth <= 0;
+
         this.playerGridPos.row = newRow;
         this.playerGridPos.col = newCol;
 
@@ -558,12 +701,151 @@ class Swipe extends Phaser.Scene {
 
         if (consumedKey) {
             this.time.delayedCall(this.timing.turnUnlockDelay, () => {
-                this.endLevel();
+                this.completeLevel();
+            });
+        } else if (playerDied) {
+            this.time.delayedCall(this.timing.turnUnlockDelay, () => {
+                this.failLevel();
             });
         } else {
             this.time.delayedCall(this.timing.turnUnlockDelay, () => {
                 this.isMoving = false;
             });
+        }
+    }
+
+    // -------------------------------
+    // LEVEL FLOW
+    // -------------------------------
+
+    completeLevel() {
+        this.levelEnded = true;
+        this.isMoving = true;
+
+        this.showLevelResult("LEVEL COMPLETE");
+
+        this.time.delayedCall(this.timing.levelTransitionDelay, () => {
+            this.currentLevel++;
+            this.restartLevelState();
+        });
+    }
+
+    failLevel() {
+        this.levelEnded = true;
+        this.isMoving = true;
+
+        this.showLevelResult("LEVEL FAILED");
+
+        this.time.delayedCall(this.timing.levelTransitionDelay, () => {
+            this.restartLevelState();
+        });
+    }
+
+    showLevelResult(message) {
+        if (this.levelResultOverlay) {
+            this.levelResultOverlay.destroy();
+        }
+
+        this.levelResultOverlay = this.add.container(
+            this.game.config.width / 2,
+            this.game.config.height / 2
+        );
+
+        this.levelResultOverlay.setDepth(450);
+
+        const overlay = this.add.rectangle(
+            0,
+            0,
+            this.game.config.width,
+            this.game.config.height,
+            0x000000,
+            0.35
+        );
+
+        const resultText = this.add.text(
+            0,
+            0,
+            message,
+            {
+                fontFamily: "Arial",
+                fontSize: "48px",
+                color: "#ffffff",
+                stroke: "#000000",
+                strokeThickness: 8
+            }
+        );
+
+        resultText.setOrigin(0.5);
+
+        this.levelResultOverlay.add([overlay, resultText]);
+    }
+
+    restartLevelState() {
+        if (this.levelResultOverlay) {
+            this.levelResultOverlay.destroy();
+            this.levelResultOverlay = null;
+        }
+
+        this.clearBoard();
+
+        this.playerHealth = 20;
+        this.updateHealthText();
+
+        this.playerGridPos = {
+            row: 1,
+            col: 1
+        };
+
+        const startWorldPos = this.gridToWorld(
+            this.playerGridPos.row,
+            this.playerGridPos.col
+        );
+
+        this.playerContainer.setPosition(startWorldPos.x, startWorldPos.y);
+
+        this.levelEnded = false;
+        this.isMoving = false;
+        this.turnCount = 0;
+
+        this.chestsSpawned = 0;
+        this.chestsCollected = 0;
+        this.keyCollected = 0;
+
+        this.rockShieldActive = false;
+
+        if (this.rockShieldSprite) {
+            this.rockShieldSprite.destroy();
+            this.rockShieldSprite = null;
+        }
+
+        this.turnsSinceLastChestSpawn = this.levelConfig.chestSpawnCooldown;
+
+        this.board = [
+            [null, null, null],
+            [null, null, null],
+            [null, null, null]
+        ];
+
+        this.initializeBoard();
+        this.updateUI();
+    }
+
+    clearBoard() {
+        for (let row = 0; row < this.grid.rows; row++) {
+            for (let col = 0; col < this.grid.cols; col++) {
+                const tile = this.board[row][col];
+
+                if (tile !== null) {
+                    if (tile.wiggleEvent) {
+                        tile.wiggleEvent.remove(false);
+                        tile.wiggleEvent = null;
+                    }
+
+                    if (tile.container) {
+                        tile.container.destroy();
+                    }
+                }
+            }
         }
     }
 
@@ -913,40 +1195,6 @@ class Swipe extends Phaser.Scene {
         }
 
         return tile.damage;
-    }
-
-    endLevel() {
-        this.levelEnded = true;
-        this.isMoving = true;
-
-        console.log("Level ended!");
-
-        const overlay = this.add.rectangle(
-            this.game.config.width / 2,
-            this.game.config.height / 2,
-            this.game.config.width,
-            this.game.config.height,
-            0x000000,
-            0.35
-        );
-
-        overlay.setDepth(100);
-
-        const endText = this.add.text(
-            this.game.config.width / 2,
-            this.game.config.height / 2,
-            "LEVEL COMPLETE",
-            {
-                fontFamily: "Arial",
-                fontSize: "48px",
-                color: "#ffffff",
-                stroke: "#000000",
-                strokeThickness: 8
-            }
-        );
-
-        endText.setOrigin(0.5);
-        endText.setDepth(101);
     }
 
     // -------------------------------
