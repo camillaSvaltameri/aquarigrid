@@ -557,7 +557,9 @@ class Swipe extends Phaser.Scene {
             52,
             "Credits",
             "#d6d6d6",
-            () => {}
+            () => {
+                this.openCreditsWindow();
+            }
         );
 
         const titleMenuButton = this.createTitleMenuButton();
@@ -686,7 +688,7 @@ class Swipe extends Phaser.Scene {
         const promptText = this.add.text(
             0,
             -68,
-            "Reset Game?\nThis will erase ALL saved progress.",
+            "Are you sure?\nThis will erase all saved progress.",
             {
                 fontFamily: "Arial",
                 fontSize: "27px",
@@ -785,6 +787,203 @@ class Swipe extends Phaser.Scene {
         }
 
         this.scene.restart();
+    }
+
+    openCreditsWindow() {
+        if (this.creditsOverlay) {
+            return;
+        }
+
+        this.creditsScrollY = 0;
+        this.creditsMaxScroll = 0;
+
+        const centerX = this.game.config.width / 2;
+        const centerY = this.game.config.height / 2;
+
+        this.creditsOverlay = this.add.container(centerX, centerY);
+        this.creditsOverlay.setDepth(1200);
+
+        const backdrop = this.add.rectangle(
+            0,
+            0,
+            this.game.config.width,
+            this.game.config.height,
+            0x000000,
+            0.48
+        );
+
+        backdrop.setInteractive();
+
+        const panel = this.add.rectangle(0, 0, 650, 430, 0x000000, 0.86);
+        panel.setStrokeStyle(3, 0xffffff, 0.24);
+
+        const title = this.add.text(
+            0,
+            -178,
+            "Credits",
+            {
+                fontFamily: "Arial",
+                fontSize: "36px",
+                color: "#ffffff",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 7
+            }
+        );
+
+        title.setOrigin(0.5);
+
+        const helperText = this.add.text(
+            0,
+            178,
+            "Mouse wheel to scroll • Enter to close",
+            {
+                fontFamily: "Arial",
+                fontSize: "17px",
+                color: "#d6d6d6",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 4
+            }
+        );
+
+        helperText.setOrigin(0.5);
+
+        this.creditsListContainer = this.add.container(-260, -125);
+
+        this.creditsOverlay.add([
+            backdrop,
+            panel,
+            title,
+            this.creditsListContainer,
+            helperText
+        ]);
+
+        this.creditsMaskGraphics = this.make.graphics({ x: 0, y: 0, add: false });
+        this.creditsMaskGraphics.fillStyle(0xffffff);
+        this.creditsMaskGraphics.fillRect(centerX - 290, centerY - 135, 580, 270);
+
+        this.creditsListMask = this.creditsMaskGraphics.createGeometryMask();
+        this.creditsListContainer.setMask(this.creditsListMask);
+
+        this.populateCreditsContent();
+
+        this.creditsWheelHandler = (pointer, gameObjects, deltaX, deltaY) => {
+            this.scrollCredits(deltaY);
+        };
+
+        this.input.on("wheel", this.creditsWheelHandler);
+
+        this.creditsEnterHandler = () => {
+            this.closeCreditsWindow();
+        };
+
+        this.input.keyboard.once("keydown-ENTER", this.creditsEnterHandler);
+    }
+
+    populateCreditsContent() {
+        if (!this.creditsListContainer) {
+            return;
+        }
+
+        this.creditsListContainer.removeAll(true);
+
+        const creditLines = [
+            { label: "Game", detail: "By Camilla Shen" },
+            { label: "Visual Assets", detail: "Pixel Gnome" },
+            { label: "Visual Assets", detail: "Kenney Assets" },
+            { label: "Audio Assets", detail: "Pixabay" },
+            { label: "Background Music", detail: "Stream Cafe" },
+            { label: "Ocean Background", detail: "Magnific wallpaper" },
+            { label: "Asset Licensing", detail: "Royalty free assets used throughout" }
+        ];
+
+        let rowY = 0;
+
+        for (const credit of creditLines) {
+            const labelText = this.add.text(
+                0,
+                rowY,
+                credit.label,
+                {
+                    fontFamily: "Arial",
+                    fontSize: "21px",
+                    color: "#ffeaa7",
+                    stroke: "#000000",
+                    strokeThickness: 5
+                }
+            );
+
+            labelText.setOrigin(0, 0);
+
+            const detailText = this.add.text(
+                0,
+                rowY + 27,
+                credit.detail,
+                {
+                    fontFamily: "Arial",
+                    fontSize: "20px",
+                    color: "#ffffff",
+                    stroke: "#000000",
+                    strokeThickness: 4,
+                    wordWrap: {
+                        width: 520
+                    }
+                }
+            );
+
+            detailText.setOrigin(0, 0);
+            this.creditsListContainer.add([labelText, detailText]);
+
+            rowY += 70;
+        }
+
+        const visibleHeight = 270;
+        this.creditsMaxScroll = Math.max(0, rowY - visibleHeight);
+        this.creditsListContainer.y = -125;
+    }
+
+    closeCreditsWindow() {
+        if (this.creditsListContainer) {
+            this.creditsListContainer.clearMask();
+        }
+
+        if (this.creditsMaskGraphics) {
+            this.creditsMaskGraphics.destroy();
+            this.creditsMaskGraphics = null;
+        }
+
+        this.creditsListMask = null;
+        this.creditsListContainer = null;
+
+        if (this.creditsWheelHandler) {
+            this.input.off("wheel", this.creditsWheelHandler);
+            this.creditsWheelHandler = null;
+        }
+
+        if (this.creditsEnterHandler) {
+            this.input.keyboard.off("keydown-ENTER", this.creditsEnterHandler);
+            this.creditsEnterHandler = null;
+        }
+
+        if (this.creditsOverlay) {
+            this.creditsOverlay.destroy();
+            this.creditsOverlay = null;
+        }
+    }
+
+    scrollCredits(deltaY) {
+        if (!this.creditsOverlay || !this.creditsListContainer) {
+            return;
+        }
+
+        this.creditsScrollY = Phaser.Math.Clamp(
+            this.creditsScrollY + deltaY,
+            0,
+            this.creditsMaxScroll
+        );
+
+        this.creditsListContainer.y = -125 - this.creditsScrollY;
     }
 
     createTitleFish(textureKey, x, y, scale, swimDistance, bobDistance, duration, shouldFlip, config = {}) {
@@ -1260,6 +1459,7 @@ class Swipe extends Phaser.Scene {
 
     startGameFromHome() {
         this.closeTutorialPlaceholder();
+        this.closeCreditsWindow();
 
         if (this.homeOverlay) {
             this.homeOverlay.destroy();
