@@ -317,10 +317,46 @@ class Swipe extends Phaser.Scene {
         title.setOrigin(0.5);
 
         const titleFish = [
-            this.createTitleFish("anchovy", 120, this.game.config.height - 115, 4.2, 95, 14, 3900, true),
-            this.createTitleFish("clownfish", this.game.config.width - 130, 170, 4.4, 85, 12, 4200, true),
-            this.createTitleFish("starfish", 120, 175, 4.3, 72, 16, 3600, false),
-            this.createTitleFish("blueAngelfish", this.game.config.width - 135, this.game.config.height - 120, 4.4, 90, 13, 4400, true)
+            this.createTitleFish("anchovy", 105, this.game.config.height - 118, 3.8, 82, 12, 4300, true, {
+                startFlipX: false,
+                endFlipX: true,
+                delay: 0,
+                angle: -3
+            }),
+            this.createTitleFish("anchovy", 154, this.game.config.height - 145, 3.5, 76, 10, 4380, true, {
+                startFlipX: false,
+                endFlipX: true,
+                delay: 180,
+                angle: -2
+            }),
+            this.createTitleFish("anchovy", 148, this.game.config.height - 92, 3.3, 88, 13, 4260, true, {
+                startFlipX: false,
+                endFlipX: true,
+                delay: 90,
+                angle: -4
+            }),
+            this.createTitleFish("jellyfish", 235, this.game.config.height / 2 - 42, 4, 12, 46, 6500, false, {
+                angle: 3
+            }),
+            this.createTitleFish("crab", this.game.config.width - 150, this.game.config.height / 2 + 78, 4.1, 58, 5, 2700, true, {
+                startFlipX: true,
+                endFlipX: false,
+                angle: 5
+            }),
+            this.createTitleFish("clownfish", this.game.config.width - 125, 165, 4.4, -78, -18, 5100, true, {
+                startFlipX: true,
+                endFlipX: false,
+                startAngle: 5,
+                angle: 12
+            }),
+            this.createTitleFish("starfish", 112, 170, 4.3, 66, 17, 3800, false, {
+                angle: 8
+            }),
+            this.createTitleFish("blueAngelfish", this.game.config.width - 185, this.game.config.height - 118, 4.4, 72, 9, 5600, true, {
+                startFlipX: false,
+                endFlipX: true,
+                angle: 2
+            })
         ];
 
         const playButton = this.createHomeButton(
@@ -435,34 +471,41 @@ class Swipe extends Phaser.Scene {
         return button;
     }
 
-    createTitleFish(textureKey, x, y, scale, swimDistance, bobDistance, duration, shouldFlip) {
+    createTitleFish(textureKey, x, y, scale, swimDistance, bobDistance, duration, shouldFlip, config = {}) {
         const fish = this.add.image(x, y, textureKey);
         fish.setScale(scale);
+        fish.setFlipX(config.startFlipX === true);
+
+        if (config.startAngle !== undefined) {
+            fish.setAngle(config.startAngle);
+        }
 
         this.tweens.add({
             targets: fish,
             x: x + swimDistance,
             y: y - bobDistance,
             duration: duration,
+            delay: config.delay || 0,
             ease: "Sine.easeInOut",
             yoyo: true,
             repeat: -1,
             onYoyo: () => {
                 if (shouldFlip) {
-                    fish.setFlipX(true);
+                    fish.setFlipX(config.endFlipX ?? true);
                 }
             },
             onRepeat: () => {
                 if (shouldFlip) {
-                    fish.setFlipX(false);
+                    fish.setFlipX(config.startFlipX === true);
                 }
             }
         });
 
         this.tweens.add({
             targets: fish,
-            angle: shouldFlip ? 2.5 : 7,
+            angle: config.angle ?? (shouldFlip ? 2.5 : 7),
             duration: duration / 3,
+            delay: config.delay || 0,
             ease: "Sine.easeInOut",
             yoyo: true,
             repeat: -1
@@ -694,7 +737,7 @@ class Swipe extends Phaser.Scene {
         rowY = this.addTutorialHeading("12. Unlocking Fish", rowY);
         rowY = this.addTutorialIconLine("fish", "You can unlock new fish by collecting fish pieces from chests or buying certain fish with gems.", rowY);
         rowY = this.addTutorialParagraph("Some fish are unlocked by collecting enough pieces.", rowY);
-        rowY = this.addTutorialIconLine("minnow", "Minnow Pieces: 3/10", rowY);
+        rowY = this.addTutorialIconLine("rainbowTrout", "Rainbow Trout Pieces: 3/10", rowY);
         rowY = this.addTutorialParagraph("Once you collect enough pieces, that fish becomes unlocked. Other fish can be bought directly with gems.", rowY);
         rowY = this.addTutorialParagraph("Some special fish require another fish to be unlocked first.", rowY);
         rowY = this.addTutorialParagraph("Once a fish is unlocked, you can select it from the fish unlock menu. Changing fish is cosmetic, so you can switch fish whenever you want without affecting the level.", rowY);
@@ -844,7 +887,8 @@ class Swipe extends Phaser.Scene {
             lure: "enemyLure",
             spikes: "spikesHigh",
             worm: "worm",
-            minnow: "minnow"
+            minnow: "minnow",
+            rainbowTrout: "rainbowTrout"
         };
 
         const textureKey = iconMap[iconName];
@@ -2079,7 +2123,8 @@ class Swipe extends Phaser.Scene {
         this.shopContent.add(shopRows);
 
         const visibleHeight = 500;
-        this.shopMaxScroll = Math.max(0, rowY - visibleHeight);
+        const bottomScrollPadding = 60;
+        this.shopMaxScroll = Math.max(0, rowY - visibleHeight + bottomScrollPadding);
         this.shopScrollY = Phaser.Math.Clamp(
             this.shopScrollY,
             0,
