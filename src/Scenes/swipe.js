@@ -209,13 +209,53 @@ class Swipe extends Phaser.Scene {
             return;
         }
 
-        const existingBubbles = this.sound.get("bubblesSound");
-
-        if (existingBubbles && existingBubbles.isPlaying) {
-            existingBubbles.stop();
+        if (this.bubblesFadeTween) {
+            this.bubblesFadeTween.stop();
+            this.bubblesFadeTween = null;
         }
 
-        this.sound.play("bubblesSound", { volume: 0.5 });
+        if (!this.bubblesHoverSound) {
+            this.bubblesHoverSound = this.sound.add("bubblesSound", {
+                loop: true,
+                volume: 0.45
+            });
+        }
+
+        this.bubblesHoverSound.setVolume(0.45);
+
+        if (!this.bubblesHoverSound.isPlaying) {
+            this.bubblesHoverSound.play();
+        }
+    }
+
+    stopBubblesSound() {
+        if (!this.bubblesHoverSound || !this.bubblesHoverSound.isPlaying) {
+            return;
+        }
+
+        if (this.bubblesFadeTween) {
+            this.bubblesFadeTween.stop();
+        }
+
+        this.bubblesFadeTween = this.tweens.addCounter({
+            from: this.bubblesHoverSound.volume,
+            to: 0,
+            duration: 180,
+            ease: "Sine.easeOut",
+            onUpdate: (tween) => {
+                if (this.bubblesHoverSound) {
+                    this.bubblesHoverSound.setVolume(tween.getValue());
+                }
+            },
+            onComplete: () => {
+                if (this.bubblesHoverSound) {
+                    this.bubblesHoverSound.stop();
+                    this.bubblesHoverSound.setVolume(0.45);
+                }
+
+                this.bubblesFadeTween = null;
+            }
+        });
     }
 
     playBgm(key) {
@@ -369,6 +409,8 @@ class Swipe extends Phaser.Scene {
         });
 
         bg.on("pointerout", () => {
+            this.stopBubblesSound();
+
             bg.setFillStyle(0x000000, 0.42);
             bg.setStrokeStyle(3, 0xffffff, 0.28);
             text.setColor(color);
@@ -383,6 +425,7 @@ class Swipe extends Phaser.Scene {
         });
 
         bg.on("pointerdown", () => {
+            this.stopBubblesSound();
             this.playClickSound();
             callback();
         });
@@ -806,6 +849,11 @@ class Swipe extends Phaser.Scene {
         if (textureKey && this.textures.exists(textureKey)) {
             const sprite = this.add.image(0, 0, textureKey);
             this.fitSpriteToCell(sprite, 34, 34);
+
+            if (textureKey === "rock") {
+                sprite.y -= 8;
+            }
+
             iconContainer.add(sprite);
             return iconContainer;
         }
@@ -1073,6 +1121,11 @@ class Swipe extends Phaser.Scene {
                 linearGrowth: 230,
                 curveGrowth: 18
             }
+        };
+
+        this.shopItemConfig = {
+            medKitGemCost: 5,
+            rockGemCost: 5
         };
 
         // -------------------------------
@@ -1793,12 +1846,12 @@ class Swipe extends Phaser.Scene {
         this.shopOverlay.setDepth(560);
 
         const bg = this.add.image(0, 0, "unlockMenuBG");
-        bg.setDisplaySize(760, 520);
+        bg.setDisplaySize(760, 660);
         bg.setAlpha(0.96);
 
         const title = this.add.text(
             0,
-            -220,
+            -290,
             "Shop",
             {
                 fontFamily: "Arial",
@@ -1816,8 +1869,8 @@ class Swipe extends Phaser.Scene {
 
         const helperText = this.add.text(
             0,
-            215,
-            "Click an upgrade or press Enter to close",
+            285,
+            "Click a purchase or press Enter to close",
             {
                 fontFamily: "Arial",
                 fontSize: "18px",
@@ -1864,7 +1917,7 @@ class Swipe extends Phaser.Scene {
         const startingHealthCap = this.getStartingHealthCap();
 
         const maxHealthRow = this.createShopUpgradeRow({
-            y: -55,
+            y: -115,
             title: "Max Health",
             valueText: this.canUpgradeMaxHealth()
                 ? `${this.playerMaxHealth} → ${this.playerMaxHealth + 1}`
@@ -1880,7 +1933,7 @@ class Swipe extends Phaser.Scene {
         });
 
         const startingHealthRow = this.createShopUpgradeRow({
-            y: 92,
+            y: 22,
             title: "Starting Health",
             valueText: this.canUpgradeStartingHealth()
                 ? `${this.playerStartingHealth} → ${this.playerStartingHealth + 1}`
@@ -1895,7 +1948,31 @@ class Swipe extends Phaser.Scene {
             }
         });
 
-        this.shopContent.add([maxHealthRow, startingHealthRow]);
+        const medKitRow = this.createShopItemRow({
+            y: 155,
+            title: "Med Kit",
+            iconKey: "medKit",
+            valueText: `Owned: ${this.medKitCount}`,
+            costText: `Cost: ${this.shopItemConfig.medKitGemCost} Gems`,
+            canAfford: this.gemCount >= this.shopItemConfig.medKitGemCost,
+            onPurchase: () => {
+                this.purchaseMedKit();
+            }
+        });
+
+        const rockRow = this.createShopItemRow({
+            y: 265,
+            title: "Rock",
+            iconKey: "rock",
+            valueText: `Owned: ${this.rockCount}`,
+            costText: `Cost: ${this.shopItemConfig.rockGemCost} Gems`,
+            canAfford: this.gemCount >= this.shopItemConfig.rockGemCost,
+            onPurchase: () => {
+                this.purchaseRock();
+            }
+        });
+
+        this.shopContent.add([maxHealthRow, startingHealthRow, medKitRow, rockRow]);
     }
 
     createShopUpgradeRow(config) {
@@ -2002,6 +2079,122 @@ class Swipe extends Phaser.Scene {
         return row;
     }
 
+    createShopItemRow(config) {
+        const row = this.add.container(0, config.y);
+
+        const panel = this.add.rectangle(
+            0,
+            0,
+            620,
+            92,
+            0x000000,
+            0.34
+        );
+
+        panel.setStrokeStyle(2, 0xffffff, 0.18);
+
+        const icon = this.add.image(-264, 0, config.iconKey);
+        this.fitShopItemIcon(icon, config.iconKey);
+
+        const titleText = this.add.text(
+            -220,
+            -20,
+            config.title,
+            {
+                fontFamily: "Arial",
+                fontSize: "25px",
+                color: "#ffffff",
+                stroke: "#000000",
+                strokeThickness: 6
+            }
+        );
+
+        titleText.setOrigin(0, 0.5);
+
+        const valueText = this.add.text(
+            -220,
+            18,
+            config.valueText,
+            {
+                fontFamily: "Arial",
+                fontSize: "20px",
+                color: "#55ff88",
+                stroke: "#000000",
+                strokeThickness: 5
+            }
+        );
+
+        valueText.setOrigin(0, 0.5);
+
+        const costText = this.add.text(
+            190,
+            -20,
+            config.costText,
+            {
+                fontFamily: "Arial",
+                fontSize: "20px",
+                color: config.canAfford ? "#9be8ff" : "#ffb0b0",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 5
+            }
+        );
+
+        costText.setOrigin(0.5);
+
+        const button = this.add.rectangle(
+            190,
+            22,
+            170,
+            46,
+            0x000000,
+            0.48
+        );
+
+        button.setStrokeStyle(2, 0xffffff, 0.28);
+        button.setInteractive({ useHandCursor: true });
+
+        const buttonText = this.add.text(
+            190,
+            22,
+            "Buy",
+            {
+                fontFamily: "Arial",
+                fontSize: "22px",
+                color: config.canAfford ? "#55ff88" : "#ffb0b0",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 5
+            }
+        );
+
+        buttonText.setOrigin(0.5);
+
+        button.on("pointerdown", () => {
+            this.playClickSound();
+            config.onPurchase();
+        });
+
+        row.add([panel, icon, titleText, valueText, costText, button, buttonText]);
+
+        return row;
+    }
+
+    fitShopItemIcon(icon, iconKey) {
+        if (iconKey === "rock") {
+            this.fitSpriteToCell(icon, 52, 52);
+            icon.y -= 13;
+            return;
+        }
+
+        if (iconKey === "medKit") {
+            this.fitSpriteToCell(icon, 46, 46);
+            return;
+        }
+
+        this.fitSpriteToCell(icon, 42, 42);
+    }
+
     getStartingHealthCap() {
         return this.playerMaxHealth - this.healthUpgradeConfig.startingHealthGap;
     }
@@ -2084,6 +2277,38 @@ class Swipe extends Phaser.Scene {
         this.updateUI();
         this.populateShop();
         this.showChestRewardMessage("Starting Health upgraded");
+    }
+
+    purchaseMedKit() {
+        const cost = this.shopItemConfig.medKitGemCost;
+
+        if (this.gemCount < cost) {
+            this.showChestRewardMessage("Not enough gems");
+            return;
+        }
+
+        this.gemCount -= cost;
+        this.medKitCount++;
+
+        this.updateUI();
+        this.populateShop();
+        this.showChestRewardMessage("Purchased Med Kit");
+    }
+
+    purchaseRock() {
+        const cost = this.shopItemConfig.rockGemCost;
+
+        if (this.gemCount < cost) {
+            this.showChestRewardMessage("Not enough gems");
+            return;
+        }
+
+        this.gemCount -= cost;
+        this.rockCount++;
+
+        this.updateUI();
+        this.populateShop();
+        this.showChestRewardMessage("Purchased Rock");
     }
 
     getFishOutlineKey(fishKey) {
