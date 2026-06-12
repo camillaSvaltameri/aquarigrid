@@ -752,7 +752,7 @@ class Swipe extends Phaser.Scene {
         const promptText = this.add.text(
             0,
             -68,
-            "Are you sure?\nThis will erase all saved progress.",
+            "Reset Game?\nThis will erase ALL saved progress.",
             {
                 fontFamily: "Arial",
                 fontSize: "27px",
