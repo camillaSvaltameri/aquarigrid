@@ -6,6 +6,7 @@ class Swipe extends Phaser.Scene {
     }
 
     preload() {
+        this.load.image("titleScreenBG", "./assets/titlescreenBG.png");
         this.load.image("board", "./assets/board.png");
         this.load.image("anchovy", "./assets/Anchovy.png");
 
@@ -47,6 +48,184 @@ class Swipe extends Phaser.Scene {
         this.load.image("spikesDown", "./assets/spikesDown.png");
     }
     create() {
+        this.createHomeScreen();
+    }
+
+    createHomeScreen() {
+        this.homeScreenOpen = true;
+
+        this.homeOverlay = this.add.container(0, 0);
+        this.homeOverlay.setDepth(1000);
+
+        const bg = this.add.image(0, 0, "titleScreenBG").setOrigin(0, 0);
+        bg.displayWidth = this.game.config.width;
+        bg.displayHeight = this.game.config.height;
+
+        const title = this.add.text(
+            this.game.config.width / 2,
+            105,
+            "Aquarigrid",
+            {
+                fontFamily: "Arial",
+                fontSize: "76px",
+                color: "#ffffff",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 10
+            }
+        );
+
+        title.setOrigin(0.5);
+
+        const playButton = this.createHomeButton(
+            this.game.config.width / 2,
+            this.game.config.height / 2 - 20,
+            270,
+            74,
+            "Play",
+            "#55ff88",
+            () => {
+                this.startGameFromHome();
+            }
+        );
+
+        const tutorialButton = this.createHomeButton(
+            this.game.config.width / 2,
+            this.game.config.height / 2 + 80,
+            270,
+            64,
+            "Tutorial",
+            "#9be8ff",
+            () => {
+                this.openTutorialPlaceholder();
+            }
+        );
+
+        const creditsButton = this.createHomeButton(
+            this.game.config.width / 2,
+            this.game.config.height / 2 + 165,
+            210,
+            52,
+            "Credits",
+            "#d6d6d6",
+            () => {}
+        );
+
+        this.homeOverlay.add([bg, title, playButton, tutorialButton, creditsButton]);
+    }
+
+    createHomeButton(x, y, width, height, label, color, callback) {
+        const button = this.add.container(x, y);
+
+        const bg = this.add.rectangle(
+            0,
+            0,
+            width,
+            height,
+            0x000000,
+            0.42
+        );
+
+        bg.setStrokeStyle(3, 0xffffff, 0.28);
+        bg.setInteractive({ useHandCursor: true });
+
+        const text = this.add.text(
+            0,
+            0,
+            label,
+            {
+                fontFamily: "Arial",
+                fontSize: `${Math.floor(height * 0.42)}px`,
+                color: color,
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 6
+            }
+        );
+
+        text.setOrigin(0.5);
+        bg.on("pointerdown", callback);
+
+        button.add([bg, text]);
+
+        return button;
+    }
+
+    openTutorialPlaceholder() {
+        if (this.homeTutorialOverlay) {
+            return;
+        }
+
+        this.homeTutorialOverlay = this.add.container(
+            this.game.config.width / 2,
+            this.game.config.height / 2
+        );
+
+        this.homeTutorialOverlay.setDepth(1200);
+
+        const backdrop = this.add.rectangle(
+            0,
+            0,
+            this.game.config.width,
+            this.game.config.height,
+            0x000000,
+            0.45
+        );
+
+        const panel = this.add.rectangle(
+            0,
+            0,
+            560,
+            220,
+            0x000000,
+            0.72
+        );
+
+        panel.setStrokeStyle(3, 0xffffff, 0.24);
+
+        const text = this.add.text(
+            0,
+            0,
+            "Tutorial coming soon\nPress ENTER to close",
+            {
+                fontFamily: "Arial",
+                fontSize: "30px",
+                color: "#ffffff",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 6
+            }
+        );
+
+        text.setOrigin(0.5);
+
+        this.homeTutorialOverlay.add([backdrop, panel, text]);
+
+        this.input.keyboard.once("keydown-ENTER", () => {
+            this.closeTutorialPlaceholder();
+        });
+    }
+
+    closeTutorialPlaceholder() {
+        if (this.homeTutorialOverlay) {
+            this.homeTutorialOverlay.destroy();
+            this.homeTutorialOverlay = null;
+        }
+    }
+
+    startGameFromHome() {
+        this.closeTutorialPlaceholder();
+
+        if (this.homeOverlay) {
+            this.homeOverlay.destroy();
+            this.homeOverlay = null;
+        }
+
+        this.homeScreenOpen = false;
+        this.createGame();
+    }
+
+    createGame() {
         this.boardImage = this.add.image(0, 0, "board").setOrigin(0, 0);
 
         this.boardImage.displayWidth = this.game.config.width;
@@ -203,7 +382,7 @@ class Swipe extends Phaser.Scene {
 
         // chest rewards
         this.chestRewardConfig = {
-            continueGemCost: 10,
+            continueGemCost: 20,
 
             dropWeights: {
                 gold: 45,
@@ -235,6 +414,25 @@ class Swipe extends Phaser.Scene {
                 { value: 4, weight: 2 },
                 { value: 5, weight: 1 }
             ]
+        };
+
+        this.healthUpgradeConfig = {
+            maxHealthCap: 60,
+            startingHealthGap: 5,
+
+            maxHealth: {
+                baseValue: 25,
+                baseCost: 500,
+                linearGrowth: 175,
+                curveGrowth: 12
+            },
+
+            startingHealth: {
+                baseValue: 20,
+                baseCost: 800,
+                linearGrowth: 230,
+                curveGrowth: 18
+            }
         };
 
         // -------------------------------
@@ -270,8 +468,9 @@ class Swipe extends Phaser.Scene {
         // -------------------------------
         // LEVEL STATE
         // -------------------------------
-        this.playerHealth = 20;
-        this.playerMaxHealth = 25;
+        this.playerMaxHealth = this.healthUpgradeConfig.maxHealth.baseValue;
+        this.playerStartingHealth = this.healthUpgradeConfig.startingHealth.baseValue;
+        this.playerHealth = this.playerStartingHealth;
 
         this.playerGridPos = {
             row: 1,
@@ -281,6 +480,7 @@ class Swipe extends Phaser.Scene {
         this.levelEnded = false;
         this.menuOpen = false;
         this.unlockMenuOpen = false;
+        this.shopOpen = false;
         this.failChoiceOpen = false;
         this.levelRewardOpen = false;
 
@@ -355,6 +555,7 @@ class Swipe extends Phaser.Scene {
             right: Phaser.Input.Keyboard.KeyCodes.D,
             enter: Phaser.Input.Keyboard.KeyCodes.ENTER,
             u: Phaser.Input.Keyboard.KeyCodes.U,
+            s: Phaser.Input.Keyboard.KeyCodes.S,
             c: Phaser.Input.Keyboard.KeyCodes.C,
             r: Phaser.Input.Keyboard.KeyCodes.R,
             y: Phaser.Input.Keyboard.KeyCodes.Y,
@@ -373,6 +574,10 @@ class Swipe extends Phaser.Scene {
     }
 
     update() {
+        if (this.homeScreenOpen) {
+            return;
+        }
+
         if (this.failChoiceOpen) {
             if (Phaser.Input.Keyboard.JustDown(this.keys.c)) {
                 this.continueAfterFailure();
@@ -413,6 +618,14 @@ class Swipe extends Phaser.Scene {
                 }
             }
 
+            if (Phaser.Input.Keyboard.JustDown(this.keys.s)) {
+                if (this.shopOpen) {
+                    this.closeShop();
+                } else {
+                    this.openShop();
+                }
+            }
+
             if (Phaser.Input.Keyboard.JustDown(this.keys.up)) {
                 this.scrollUnlockMenu(-70);
             } else if (Phaser.Input.Keyboard.JustDown(this.keys.down)) {
@@ -422,6 +635,8 @@ class Swipe extends Phaser.Scene {
             if (Phaser.Input.Keyboard.JustDown(this.keys.enter)) {
                 if (this.unlockMenuOpen) {
                     this.closeUnlockMenu();
+                } else if (this.shopOpen) {
+                    this.closeShop();
                 } else {
                     this.closeMenu();
                 }
@@ -658,7 +873,7 @@ class Swipe extends Phaser.Scene {
         this.menuText = this.add.text(
             0,
             0,
-            "MENU\n\nPress U to see unlocks\nPress ENTER to go back",
+            "MENU\n\nPress U to see unlocks\nPress S to open shop\nPress ENTER to go back",
             {
                 fontFamily: "Arial",
                 fontSize: "42px",
@@ -679,6 +894,10 @@ class Swipe extends Phaser.Scene {
             this.closeUnlockMenu();
         }
 
+        if (this.shopOpen) {
+            this.closeShop();
+        }
+
         this.menuOpen = false;
 
         if (this.menuOverlay) {
@@ -690,6 +909,10 @@ class Swipe extends Phaser.Scene {
     openUnlockMenu() {
         if (this.unlockMenuOpen) {
             return;
+        }
+
+        if (this.shopOpen) {
+            this.closeShop();
         }
 
         this.unlockMenuOpen = true;
@@ -894,6 +1117,314 @@ class Swipe extends Phaser.Scene {
         );
 
         this.unlockListContainer.y = -205 - this.unlockScrollY;
+    }
+
+    openShop() {
+        if (this.shopOpen) {
+            return;
+        }
+
+        if (this.unlockMenuOpen) {
+            this.closeUnlockMenu();
+        }
+
+        this.shopOpen = true;
+
+        if (this.menuText) {
+            this.menuText.setVisible(false);
+        }
+
+        this.goldUI.container.setDepth(760);
+        this.gemUI.container.setDepth(760);
+
+        this.shopOverlay = this.add.container(
+            this.game.config.width / 2,
+            this.grid.centerY + 20
+        );
+
+        this.shopOverlay.setDepth(560);
+
+        const bg = this.add.image(0, 0, "unlockMenuBG");
+        bg.setDisplaySize(760, 520);
+        bg.setAlpha(0.96);
+
+        const title = this.add.text(
+            0,
+            -220,
+            "Shop",
+            {
+                fontFamily: "Arial",
+                fontSize: "38px",
+                color: "#ffffff",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 7
+            }
+        );
+
+        title.setOrigin(0.5);
+
+        this.shopContent = this.add.container(0, -62);
+
+        const helperText = this.add.text(
+            0,
+            215,
+            "Click an upgrade or press Enter to close",
+            {
+                fontFamily: "Arial",
+                fontSize: "18px",
+                color: "#ffffff",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 5
+            }
+        );
+
+        helperText.setOrigin(0.5);
+
+        this.shopOverlay.add([bg, title, this.shopContent, helperText]);
+        this.populateShop();
+    }
+
+    closeShop() {
+        this.shopOpen = false;
+
+        if (this.shopOverlay) {
+            this.shopOverlay.destroy();
+            this.shopOverlay = null;
+        }
+
+        this.shopContent = null;
+
+        this.goldUI.container.setDepth(200);
+        this.gemUI.container.setDepth(200);
+
+        if (this.menuText) {
+            this.menuText.setVisible(true);
+        }
+    }
+
+    populateShop() {
+        if (!this.shopContent) {
+            return;
+        }
+
+        this.shopContent.removeAll(true);
+
+        const maxHealthCost = this.getMaxHealthUpgradeCost();
+        const startingHealthCost = this.getStartingHealthUpgradeCost();
+        const startingHealthCap = this.getStartingHealthCap();
+
+        const maxHealthRow = this.createShopUpgradeRow({
+            y: -55,
+            title: "Max Health",
+            valueText: this.canUpgradeMaxHealth()
+                ? `${this.playerMaxHealth} → ${this.playerMaxHealth + 1}`
+                : `${this.playerMaxHealth} / ${this.healthUpgradeConfig.maxHealthCap}`,
+            costText: this.canUpgradeMaxHealth()
+                ? `Cost: ${maxHealthCost} Gold`
+                : "Max Health capped",
+            canUpgrade: this.canUpgradeMaxHealth(),
+            canAfford: this.goldCount >= maxHealthCost,
+            onPurchase: () => {
+                this.purchaseMaxHealthUpgrade();
+            }
+        });
+
+        const startingHealthRow = this.createShopUpgradeRow({
+            y: 92,
+            title: "Starting Health",
+            valueText: this.canUpgradeStartingHealth()
+                ? `${this.playerStartingHealth} → ${this.playerStartingHealth + 1}`
+                : `${this.playerStartingHealth} / ${startingHealthCap}`,
+            costText: this.canUpgradeStartingHealth()
+                ? `Cost: ${startingHealthCost} Gold`
+                : "Upgrade Max Health first",
+            canUpgrade: this.canUpgradeStartingHealth(),
+            canAfford: this.goldCount >= startingHealthCost,
+            onPurchase: () => {
+                this.purchaseStartingHealthUpgrade();
+            }
+        });
+
+        this.shopContent.add([maxHealthRow, startingHealthRow]);
+    }
+
+    createShopUpgradeRow(config) {
+        const row = this.add.container(0, config.y);
+
+        const panel = this.add.rectangle(
+            0,
+            0,
+            620,
+            118,
+            0x000000,
+            0.34
+        );
+
+        panel.setStrokeStyle(2, 0xffffff, 0.18);
+
+        const titleText = this.add.text(
+            -270,
+            -31,
+            config.title,
+            {
+                fontFamily: "Arial",
+                fontSize: "27px",
+                color: "#ffffff",
+                stroke: "#000000",
+                strokeThickness: 6
+            }
+        );
+
+        titleText.setOrigin(0, 0.5);
+
+        const valueText = this.add.text(
+            -270,
+            12,
+            config.valueText,
+            {
+                fontFamily: "Arial",
+                fontSize: "24px",
+                color: "#55ff88",
+                stroke: "#000000",
+                strokeThickness: 5
+            }
+        );
+
+        valueText.setOrigin(0, 0.5);
+
+        const costText = this.add.text(
+            190,
+            -24,
+            config.costText,
+            {
+                fontFamily: "Arial",
+                fontSize: "20px",
+                color: config.canUpgrade
+                    ? (config.canAfford ? "#ffd76a" : "#ffb0b0")
+                    : "#d6d6d6",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 5
+            }
+        );
+
+        costText.setOrigin(0.5);
+
+        const button = this.add.rectangle(
+            190,
+            25,
+            170,
+            48,
+            0x000000,
+            config.canUpgrade ? 0.48 : 0.22
+        );
+
+        button.setStrokeStyle(2, 0xffffff, config.canUpgrade ? 0.28 : 0.12);
+
+        const buttonText = this.add.text(
+            190,
+            25,
+            "Upgrade",
+            {
+                fontFamily: "Arial",
+                fontSize: "22px",
+                color: config.canUpgrade
+                    ? (config.canAfford ? "#55ff88" : "#ffb0b0")
+                    : "#888888",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 5
+            }
+        );
+
+        buttonText.setOrigin(0.5);
+
+        if (config.canUpgrade) {
+            button.setInteractive({ useHandCursor: true });
+            button.on("pointerdown", config.onPurchase);
+        }
+
+        row.add([panel, titleText, valueText, costText, button, buttonText]);
+
+        return row;
+    }
+
+    getStartingHealthCap() {
+        return this.playerMaxHealth - this.healthUpgradeConfig.startingHealthGap;
+    }
+
+    canUpgradeMaxHealth() {
+        return this.playerMaxHealth < this.healthUpgradeConfig.maxHealthCap;
+    }
+
+    canUpgradeStartingHealth() {
+        return this.playerStartingHealth < this.getStartingHealthCap();
+    }
+
+    getMaxHealthUpgradeCost() {
+        const upgradeLevel = this.playerMaxHealth - this.healthUpgradeConfig.maxHealth.baseValue;
+
+        return (
+            this.healthUpgradeConfig.maxHealth.baseCost +
+            upgradeLevel * this.healthUpgradeConfig.maxHealth.linearGrowth +
+            upgradeLevel * upgradeLevel * this.healthUpgradeConfig.maxHealth.curveGrowth
+        );
+    }
+
+    getStartingHealthUpgradeCost() {
+        const upgradeLevel = this.playerStartingHealth - this.healthUpgradeConfig.startingHealth.baseValue;
+
+        return (
+            this.healthUpgradeConfig.startingHealth.baseCost +
+            upgradeLevel * this.healthUpgradeConfig.startingHealth.linearGrowth +
+            upgradeLevel * upgradeLevel * this.healthUpgradeConfig.startingHealth.curveGrowth
+        );
+    }
+
+    purchaseMaxHealthUpgrade() {
+        if (!this.canUpgradeMaxHealth()) {
+            this.showChestRewardMessage("Max Health is already capped");
+            return;
+        }
+
+        const cost = this.getMaxHealthUpgradeCost();
+
+        if (this.goldCount < cost) {
+            this.showChestRewardMessage("Not enough Gold");
+            return;
+        }
+
+        this.goldCount -= cost;
+        this.playerMaxHealth++;
+
+        this.updateHealthText();
+        this.updateUI();
+        this.populateShop();
+        this.showChestRewardMessage("Max Health upgraded");
+    }
+
+    purchaseStartingHealthUpgrade() {
+        if (!this.canUpgradeStartingHealth()) {
+            this.showChestRewardMessage("Upgrade Max Health first");
+            return;
+        }
+
+        const cost = this.getStartingHealthUpgradeCost();
+
+        if (this.goldCount < cost) {
+            this.showChestRewardMessage("Not enough Gold");
+            return;
+        }
+
+        this.goldCount -= cost;
+        this.playerStartingHealth++;
+
+        this.updateHealthText();
+        this.updateUI();
+        this.populateShop();
+        this.showChestRewardMessage("Starting Health upgraded");
     }
 
     getFishOutlineKey(fishKey) {
@@ -1945,7 +2476,7 @@ class Swipe extends Phaser.Scene {
         }
 
         this.gemCount -= this.chestRewardConfig.continueGemCost;
-        this.playerHealth = this.playerMaxHealth;
+        this.playerHealth = this.playerStartingHealth;
         this.updateHealthText();
 
         this.failChoiceOpen = false;
@@ -1958,7 +2489,7 @@ class Swipe extends Phaser.Scene {
         }
 
         this.updateUI();
-        this.showChestRewardMessage("Continued with full health");
+        this.showChestRewardMessage("Continued with starting health");
     }
 
     retryAfterFailure() {
@@ -2272,7 +2803,7 @@ class Swipe extends Phaser.Scene {
 
         this.clearBoard();
 
-        this.playerHealth = 20;
+        this.playerHealth = this.playerStartingHealth;
         this.updateHealthText();
 
         this.playerGridPos = {
