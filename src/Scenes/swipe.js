@@ -642,7 +642,7 @@ class Swipe extends Phaser.Scene {
         rowY = this.addTutorialIconLine("medkit", "Medkits are less common, about 10%.", rowY);
         rowY = this.addTutorialIconLine("rock", "Rocks are less common, about 10%.", rowY);
         rowY = this.addTutorialIconLine("gem", "Gems are the rarest reward, about 5%.", rowY);
-        rowY = this.addTutorialParagraph("If there are no eligible fish pieces left to drop, the reward pool may shift more toward other rewards.", rowY);
+        //rowY = this.addTutorialParagraph("If there are no eligible fish pieces left to drop, the reward pool will only drop other rewards.", rowY);
 
         rowY = this.addTutorialHeading("5. Dangerous Tiles", rowY);
         rowY = this.addTutorialParagraph("Some tiles damage you when you move onto them.", rowY);
@@ -676,9 +676,10 @@ class Swipe extends Phaser.Scene {
         rowY = this.addTutorialParagraph("Continuing restores your health to your upgraded starting health and lets you keep going from the current state.", rowY);
         rowY = this.addTutorialParagraph("Retrying restarts the level, but you lose any chests collected during that attempt.", rowY);
 
-        rowY = this.addTutorialHeading("10. Gold and Gems", rowY);
+        rowY = this.addTutorialHeading("10. Currencies", rowY);
         rowY = this.addTutorialIconLine("gold", "Gold is mainly used for upgrades in the shop.", rowY);
         rowY = this.addTutorialIconLine("gem", "Gems are used for special purchases, such as unlocking certain fish, buying medkits and rocks, or continuing after failure.", rowY);
+        rowY = this.addTutorialIconLine("key", "Keys are earned by completing levels and can be spent in the shop to buy fish pieces.", rowY);
 
         rowY = this.addTutorialHeading("11. The Shop", rowY);
         rowY = this.addTutorialParagraph("Open the menu to access the shop.", rowY);
@@ -688,6 +689,7 @@ class Swipe extends Phaser.Scene {
         rowY = this.addTutorialParagraph("Starting Health cannot reach your full Max Health. It will always stay at least 5 points below your Max Health.", rowY);
         rowY = this.addTutorialParagraph("Examples: 25 Max Health allows 20 Starting Health. 40 Max Health allows 35 Starting Health. 60 Max Health allows 55 Starting Health.", rowY);
         rowY = this.addTutorialParagraph("Upgrades get more expensive as they get stronger. Medkits and rocks can also be purchased for 5 gems each.", rowY);
+        rowY = this.addTutorialParagraph("Keys can buy one piece at a time for fish that unlock through pieces and do not require another fish first.", rowY);
 
         rowY = this.addTutorialHeading("12. Unlocking Fish", rowY);
         rowY = this.addTutorialIconLine("fish", "You can unlock new fish by collecting fish pieces from chests or buying certain fish with gems.", rowY);
@@ -1135,10 +1137,17 @@ class Swipe extends Phaser.Scene {
         // -------------------------------
         this.currentLevel = 1;
 
-        this.goldCount = 1000;
-        this.gemCount = 5000;
+        //!ACTUAL GAMEPLAY VALUES!
+        //this.goldCount = 5000;
+        //this.gemCount = 100;
+        //this.keyCount = 0;
 
-        //ACTUAL GAMEPLAY VALUES
+        //DEBUG ONLY
+        this.goldCount = 50000;
+        this.gemCount = 5000;
+        this.keyCount = 1000;
+
+        //!ACTUAL GAMEPLAY VALUES!
         //this.medKitCount = 5;
         //this.rockCount = 5;
         
@@ -1181,6 +1190,10 @@ class Swipe extends Phaser.Scene {
 
         this.unlockScrollY = 0;
         this.unlockMaxScroll = 0;
+        this.shopScrollY = 0;
+        this.shopMaxScroll = 0;
+        this.shopContentBaseY = -185;
+        this.shopSessionPieceFishKeys = [];
         this.turnCount = 0;
 
         this.chestsSpawned = 0;
@@ -1261,6 +1274,8 @@ class Swipe extends Phaser.Scene {
         this.input.on("wheel", (pointer, gameObjects, deltaX, deltaY) => {
             if (this.unlockMenuOpen) {
                 this.scrollUnlockMenu(deltaY);
+            } else if (this.shopOpen) {
+                this.scrollShop(deltaY);
             }
         });
 
@@ -1394,21 +1409,30 @@ class Swipe extends Phaser.Scene {
         this.levelText.setDepth(200);
 
         this.goldUI = this.createCounterPanel({
-            x: this.game.config.width / 2 - 105,
+            x: this.game.config.width / 2 - 220,
             y: 90,
             iconKey: "gold",
             text: `${this.goldCount}`,
             side: "left",
-            panelWidth: 190
+            panelWidth: 175
         });
 
         this.gemUI = this.createCounterPanel({
-            x: this.game.config.width / 2 + 105,
+            x: this.game.config.width / 2,
             y: 90,
             iconKey: "gem",
             text: `${this.gemCount}`,
             side: "left",
             panelWidth: 170
+        });
+
+        this.keyCurrencyUI = this.createCounterPanel({
+            x: this.game.config.width / 2 + 210,
+            y: 90,
+            iconKey: "key",
+            text: `${this.keyCount}`,
+            side: "left",
+            panelWidth: 150
         });
 
         this.menuButton = this.add.image(
@@ -1542,6 +1566,7 @@ class Swipe extends Phaser.Scene {
 
         this.goldUI.text.setText(`${this.goldCount}`);
         this.gemUI.text.setText(`${this.gemCount}`);
+        this.keyCurrencyUI.text.setText(`${this.keyCount}`);
 
         this.medKitUI.text.setText(`${this.medKitCount}`);
         this.rockUI.text.setText(`${this.rockCount}`);
@@ -1832,6 +1857,10 @@ class Swipe extends Phaser.Scene {
         }
 
         this.shopOpen = true;
+        this.shopScrollY = 0;
+        this.shopSessionPieceFishKeys = this.getKeyShopPieceFish().map((fish) => {
+            return fish.key;
+        });
 
         if (this.menuText) {
             this.menuText.setVisible(false);
@@ -1839,6 +1868,7 @@ class Swipe extends Phaser.Scene {
 
         this.goldUI.container.setDepth(760);
         this.gemUI.container.setDepth(760);
+        this.keyCurrencyUI.container.setDepth(760);
 
         this.shopOverlay = this.add.container(
             this.game.config.width / 2,
@@ -1867,12 +1897,16 @@ class Swipe extends Phaser.Scene {
 
         title.setOrigin(0.5);
 
-        this.shopContent = this.add.container(0, -62);
+        this.shopContentBaseY = -185;
+        this.shopContent = this.add.container(0, this.shopContentBaseY);
+
+        const shopKeyCounter = this.createShopKeyCounter(282, -286);
+        this.shopKeyCountText = shopKeyCounter.text;
 
         const helperText = this.add.text(
             0,
             285,
-            "Click a purchase or press Enter to close",
+            "Mouse wheel to scroll • Click a purchase or press Enter to close",
             {
                 fontFamily: "Arial",
                 fontSize: "18px",
@@ -1885,12 +1919,36 @@ class Swipe extends Phaser.Scene {
 
         helperText.setOrigin(0.5);
 
-        this.shopOverlay.add([bg, title, this.shopContent, helperText]);
+        this.shopOverlay.add([bg, title, shopKeyCounter.container, this.shopContent, helperText]);
+
+        this.shopMaskGraphics = this.make.graphics({ x: 0, y: 0, add: false });
+        this.shopMaskGraphics.fillStyle(0xffffff);
+        this.shopMaskGraphics.fillRect(
+            this.game.config.width / 2 - 340,
+            this.grid.centerY + 20 - 250,
+            680,
+            500
+        );
+
+        this.shopListMask = this.shopMaskGraphics.createGeometryMask();
+        this.shopContent.setMask(this.shopListMask);
+
         this.populateShop();
     }
 
     closeShop() {
         this.shopOpen = false;
+
+        if (this.shopContent) {
+            this.shopContent.clearMask();
+        }
+
+        if (this.shopMaskGraphics) {
+            this.shopMaskGraphics.destroy();
+            this.shopMaskGraphics = null;
+        }
+
+        this.shopListMask = null;
 
         if (this.shopOverlay) {
             this.shopOverlay.destroy();
@@ -1898,9 +1956,12 @@ class Swipe extends Phaser.Scene {
         }
 
         this.shopContent = null;
+        this.shopKeyCountText = null;
+        this.shopSessionPieceFishKeys = [];
 
         this.goldUI.container.setDepth(200);
         this.gemUI.container.setDepth(200);
+        this.keyCurrencyUI.container.setDepth(200);
 
         if (this.menuText) {
             this.menuText.setVisible(true);
@@ -1913,13 +1974,15 @@ class Swipe extends Phaser.Scene {
         }
 
         this.shopContent.removeAll(true);
+        this.updateShopKeyCounter();
 
         const maxHealthCost = this.getMaxHealthUpgradeCost();
         const startingHealthCost = this.getStartingHealthUpgradeCost();
         const startingHealthCap = this.getStartingHealthCap();
+        let rowY = 0;
 
         const maxHealthRow = this.createShopUpgradeRow({
-            y: -115,
+            y: rowY,
             title: "Max Health",
             valueText: this.canUpgradeMaxHealth()
                 ? `${this.playerMaxHealth} → ${this.playerMaxHealth + 1}`
@@ -1934,8 +1997,10 @@ class Swipe extends Phaser.Scene {
             }
         });
 
+        rowY += 128;
+
         const startingHealthRow = this.createShopUpgradeRow({
-            y: 22,
+            y: rowY,
             title: "Starting Health",
             valueText: this.canUpgradeStartingHealth()
                 ? `${this.playerStartingHealth} → ${this.playerStartingHealth + 1}`
@@ -1950,8 +2015,10 @@ class Swipe extends Phaser.Scene {
             }
         });
 
+        rowY += 114;
+
         const medKitRow = this.createShopItemRow({
-            y: 155,
+            y: rowY,
             title: "Med Kit",
             iconKey: "medKit",
             valueText: `Owned: ${this.medKitCount}`,
@@ -1962,8 +2029,10 @@ class Swipe extends Phaser.Scene {
             }
         });
 
+        rowY += 98;
+
         const rockRow = this.createShopItemRow({
-            y: 265,
+            y: rowY,
             title: "Rock",
             iconKey: "rock",
             valueText: `Owned: ${this.rockCount}`,
@@ -1974,7 +2043,260 @@ class Swipe extends Phaser.Scene {
             }
         });
 
-        this.shopContent.add([maxHealthRow, startingHealthRow, medKitRow, rockRow]);
+        rowY += 104;
+
+        const keyPieceTitle = this.add.text(
+            -310,
+            rowY,
+            "Key Fish Pieces",
+            {
+                fontFamily: "Arial",
+                fontSize: "23px",
+                color: "#ffeaa7",
+                stroke: "#000000",
+                strokeThickness: 5
+            }
+        );
+
+        keyPieceTitle.setOrigin(0, 0.5);
+        rowY += 46;
+
+        const keyPieceFish = this.getShopSessionPieceFish();
+        const shopRows = [maxHealthRow, startingHealthRow, medKitRow, rockRow, keyPieceTitle];
+
+        if (keyPieceFish.length <= 0) {
+            const emptyRow = this.createShopEmptyPieceRow(rowY);
+            shopRows.push(emptyRow);
+            rowY += 84;
+        } else {
+            for (const fish of keyPieceFish) {
+                const fishRow = this.createShopFishPieceRow(fish, rowY);
+                shopRows.push(fishRow);
+                rowY += 84;
+            }
+        }
+
+        this.shopContent.add(shopRows);
+
+        const visibleHeight = 500;
+        this.shopMaxScroll = Math.max(0, rowY - visibleHeight);
+        this.shopScrollY = Phaser.Math.Clamp(
+            this.shopScrollY,
+            0,
+            this.shopMaxScroll
+        );
+        this.shopContent.y = this.shopContentBaseY - this.shopScrollY;
+    }
+
+    createShopKeyCounter(x, y) {
+        const container = this.add.container(x, y);
+
+        const panel = this.add.rectangle(0, 0, 132, 46, 0x000000, 0.36);
+        panel.setStrokeStyle(2, 0xffffff, 0.18);
+
+        const icon = this.add.image(-42, 0, "key");
+        this.fitSpriteToCell(icon, 36, 36);
+
+        const text = this.add.text(
+            -8,
+            0,
+            `${this.keyCount}`,
+            {
+                fontFamily: "Arial",
+                fontSize: "22px",
+                color: "#ffffff",
+                stroke: "#000000",
+                strokeThickness: 5
+            }
+        );
+
+        text.setOrigin(0, 0.5);
+        container.add([panel, icon, text]);
+
+        return {
+            container: container,
+            text: text
+        };
+    }
+
+    updateShopKeyCounter() {
+        if (this.shopKeyCountText) {
+            this.shopKeyCountText.setText(`${this.keyCount}`);
+        }
+    }
+
+    scrollShop(deltaY) {
+        if (!this.shopOpen || !this.shopContent) {
+            return;
+        }
+
+        this.shopScrollY = Phaser.Math.Clamp(
+            this.shopScrollY + deltaY,
+            0,
+            this.shopMaxScroll
+        );
+
+        this.shopContent.y = this.shopContentBaseY - this.shopScrollY;
+    }
+
+    getKeyShopPieceFish() {
+        return this.getFishDefinitions()
+            .filter((fish) => {
+                const pieces = this.fishPieces[fish.key] || 0;
+
+                return (
+                    fish.unlockType === "drop" &&
+                    !fish.requires &&
+                    !this.isFishUnlocked(fish.key) &&
+                    pieces < fish.piecesRequired
+                );
+            })
+            .sort((a, b) => {
+                return a.displayName.localeCompare(b.displayName);
+            });
+    }
+
+    getShopSessionPieceFish() {
+        return this.shopSessionPieceFishKeys
+            .map((fishKey) => {
+                return this.getFishDefinitions().find((fish) => {
+                    return fish.key === fishKey;
+                });
+            })
+            .filter((fish) => {
+                return fish && fish.unlockType === "drop" && !fish.requires;
+            });
+    }
+
+    createShopEmptyPieceRow(y) {
+        const row = this.add.container(0, y);
+
+        const panel = this.add.rectangle(0, 0, 620, 74, 0x000000, 0.28);
+        panel.setStrokeStyle(2, 0xffffff, 0.14);
+
+        const text = this.add.text(
+            0,
+            0,
+            "You have unlocked all key purchasable fish!",
+            {
+                fontFamily: "Arial",
+                fontSize: "22px",
+                color: "#d6d6d6",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 5
+            }
+        );
+
+        text.setOrigin(0.5);
+        row.add([panel, text]);
+
+        return row;
+    }
+
+    createShopFishPieceRow(fish, y) {
+        const row = this.add.container(0, y);
+        const pieces = this.fishPieces[fish.key] || 0;
+        const fishUnlocked = this.isFishUnlocked(fish.key);
+        const canBuyPiece = !fishUnlocked && pieces < fish.piecesRequired;
+        const canAfford = this.keyCount >= 1;
+
+        const panel = this.add.rectangle(0, 0, 620, 74, 0x000000, 0.28);
+        panel.setStrokeStyle(2, 0xffffff, 0.18);
+
+        const fishSprite = this.add.image(-270, 2, fish.key);
+        fishSprite.setScale(4.1);
+
+        const nameText = this.add.text(
+            -220,
+            -15,
+            fish.displayName,
+            {
+                fontFamily: "Arial",
+                fontSize: "21px",
+                color: "#ffffff",
+                stroke: "#000000",
+                strokeThickness: 5
+            }
+        );
+
+        nameText.setOrigin(0, 0.5);
+
+        const statusText = this.add.text(
+            -220,
+            17,
+            fishUnlocked
+                ? "This fish has already been unlocked"
+                : `Pieces: ${pieces}/${fish.piecesRequired}`,
+            {
+                fontFamily: "Arial",
+                fontSize: "17px",
+                color: fishUnlocked ? "#55ff88" : "#fff2a8",
+                stroke: "#000000",
+                strokeThickness: 4
+            }
+        );
+
+        statusText.setOrigin(0, 0.5);
+
+        const costText = this.add.text(
+            130,
+            -16,
+            fishUnlocked ? "Unlocked" : "Cost: 1 Key",
+            {
+                fontFamily: "Arial",
+                fontSize: "18px",
+                color: canBuyPiece
+                    ? (canAfford ? "#ffeaa7" : "#ffb0b0")
+                    : "#d6d6d6",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 5
+            }
+        );
+
+        costText.setOrigin(0.5);
+
+        const button = this.add.rectangle(
+            130,
+            20,
+            148,
+            42,
+            0x000000,
+            canBuyPiece ? 0.48 : 0.22
+        );
+
+        button.setStrokeStyle(2, 0xffffff, canBuyPiece ? 0.28 : 0.12);
+
+        const buttonText = this.add.text(
+            130,
+            20,
+            canBuyPiece ? "Buy Piece" : "Unlocked",
+            {
+                fontFamily: "Arial",
+                fontSize: "18px",
+                color: canBuyPiece
+                    ? (canAfford ? "#55ff88" : "#ffb0b0")
+                    : "#888888",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 5
+            }
+        );
+
+        buttonText.setOrigin(0.5);
+
+        if (canBuyPiece) {
+            button.setInteractive({ useHandCursor: true });
+            button.on("pointerdown", () => {
+                this.playClickSound();
+                this.purchaseFishPieceWithKey(fish.key);
+            });
+        }
+
+        row.add([panel, fishSprite, nameText, statusText, costText, button, buttonText]);
+
+        return row;
     }
 
     createShopUpgradeRow(config) {
@@ -2311,6 +2633,60 @@ class Swipe extends Phaser.Scene {
         this.updateUI();
         this.populateShop();
         this.showChestRewardMessage("Purchased Rock");
+    }
+
+    purchaseFishPieceWithKey(fishKey) {
+        const fish = this.getFishDefinitions().find((entry) => {
+            return entry.key === fishKey;
+        });
+
+        if (!fish || fish.unlockType !== "drop" || fish.requires) {
+            this.showChestRewardMessage("Fish piece is not available");
+            return;
+        }
+
+        if (this.isFishUnlocked(fish.key)) {
+            this.showChestRewardMessage("This fish has already been unlocked");
+            this.populateShop();
+            return;
+        }
+
+        const currentPieces = this.fishPieces[fish.key] || 0;
+
+        if (currentPieces >= fish.piecesRequired) {
+            this.unlockedFishKeys[fish.key] = true;
+            this.playSfx("unlockSound", { volume: 0.75 });
+            this.updateUI();
+            this.populateShop();
+            this.showChestRewardMessage("This fish has already been unlocked");
+            return;
+        }
+
+        if (this.keyCount < 1) {
+            this.showChestRewardMessage("Not enough Keys");
+            return;
+        }
+
+        this.keyCount--;
+
+        const newPieces = Phaser.Math.Clamp(
+            currentPieces + 1,
+            0,
+            fish.piecesRequired
+        );
+
+        this.fishPieces[fish.key] = newPieces;
+
+        if (newPieces >= fish.piecesRequired) {
+            this.unlockedFishKeys[fish.key] = true;
+            this.playSfx("unlockSound", { volume: 0.75 });
+            this.showChestRewardMessage("This fish has already been unlocked");
+        } else {
+            this.showChestRewardMessage(`Purchased ${fish.displayName} Piece`);
+        }
+
+        this.updateUI();
+        this.populateShop();
     }
 
     getFishOutlineKey(fishKey) {
@@ -3339,6 +3715,7 @@ class Swipe extends Phaser.Scene {
         this.levelEnded = true;
         this.isMoving = true;
         this.levelRewardOpen = true;
+        this.keyCount++;
         this.playSfx("levelCompleteSound", { volume: 0.78 });
 
         const rewards = this.openLevelChests();
