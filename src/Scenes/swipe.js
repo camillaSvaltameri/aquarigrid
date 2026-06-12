@@ -433,9 +433,15 @@ class Swipe extends Phaser.Scene {
             return;
         }
 
+        this.tutorialScrollY = 0;
+        this.tutorialMaxScroll = 0;
+
+        const centerX = this.game.config.width / 2;
+        const centerY = this.game.config.height / 2;
+
         this.homeTutorialOverlay = this.add.container(
-            this.game.config.width / 2,
-            this.game.config.height / 2
+            centerX,
+            centerY
         );
 
         this.homeTutorialOverlay.setDepth(1200);
@@ -446,50 +452,399 @@ class Swipe extends Phaser.Scene {
             this.game.config.width,
             this.game.config.height,
             0x000000,
-            0.45
+            0.56
         );
 
         backdrop.setInteractive();
 
-        const panel = this.add.rectangle(
-            0,
-            0,
-            560,
-            220,
-            0x000000,
-            0.72
-        );
+        const panel = this.add.image(0, 0, "unlockMenuBG");
+        panel.setDisplaySize(760, 620);
+        panel.setAlpha(0.96);
 
-        panel.setStrokeStyle(3, 0xffffff, 0.24);
-
-        const text = this.add.text(
+        const title = this.add.text(
             0,
-            0,
-            "Tutorial coming soon\nPress ENTER to close",
+            -275,
+            "How to Play",
             {
                 fontFamily: "Arial",
-                fontSize: "30px",
+                fontSize: "36px",
                 color: "#ffffff",
                 align: "center",
                 stroke: "#000000",
-                strokeThickness: 6
+                strokeThickness: 7
             }
         );
 
-        text.setOrigin(0.5);
+        title.setOrigin(0.5);
 
-        this.homeTutorialOverlay.add([backdrop, panel, text]);
+        const helperText = this.add.text(
+            0,
+            270,
+            "Mouse wheel to scroll • Enter to close",
+            {
+                fontFamily: "Arial",
+                fontSize: "18px",
+                color: "#ffffff",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 5
+            }
+        );
 
-        this.input.keyboard.once("keydown-ENTER", () => {
+        helperText.setOrigin(0.5);
+
+        this.tutorialListContainer = this.add.container(-305, -205);
+
+        this.homeTutorialOverlay.add([
+            backdrop,
+            panel,
+            title,
+            this.tutorialListContainer,
+            helperText
+        ]);
+
+        this.tutorialMaskGraphics = this.make.graphics({ x: 0, y: 0, add: false });
+        this.tutorialMaskGraphics.fillStyle(0xffffff);
+        this.tutorialMaskGraphics.fillRect(centerX - 340, centerY - 220, 680, 440);
+
+        this.tutorialListMask = this.tutorialMaskGraphics.createGeometryMask();
+        this.tutorialListContainer.setMask(this.tutorialListMask);
+
+        this.populateTutorialContent();
+
+        this.tutorialWheelHandler = (pointer, gameObjects, deltaX, deltaY) => {
+            this.scrollTutorial(deltaY);
+        };
+
+        this.input.on("wheel", this.tutorialWheelHandler);
+
+        this.tutorialEnterHandler = () => {
             this.closeTutorialPlaceholder();
-        });
+        };
+
+        this.input.keyboard.once("keydown-ENTER", this.tutorialEnterHandler);
     }
 
     closeTutorialPlaceholder() {
+        if (this.tutorialListContainer) {
+            this.tutorialListContainer.clearMask();
+        }
+
+        if (this.tutorialMaskGraphics) {
+            this.tutorialMaskGraphics.destroy();
+            this.tutorialMaskGraphics = null;
+        }
+
+        this.tutorialListMask = null;
+        this.tutorialListContainer = null;
+
+        if (this.tutorialWheelHandler) {
+            this.input.off("wheel", this.tutorialWheelHandler);
+            this.tutorialWheelHandler = null;
+        }
+
+        if (this.tutorialEnterHandler) {
+            this.input.keyboard.off("keydown-ENTER", this.tutorialEnterHandler);
+            this.tutorialEnterHandler = null;
+        }
+
         if (this.homeTutorialOverlay) {
             this.homeTutorialOverlay.destroy();
             this.homeTutorialOverlay = null;
         }
+    }
+
+    populateTutorialContent() {
+        if (!this.tutorialListContainer) {
+            return;
+        }
+
+        this.tutorialListContainer.removeAll(true);
+
+        let rowY = 0;
+
+        rowY = this.addTutorialTitle("How to Play Aquarigrid", rowY);
+        rowY = this.addTutorialParagraph("Welcome to Aquarigrid, an underwater grid adventure where every move matters.", rowY);
+        rowY = this.addTutorialParagraph("Your goal is simple: survive, collect chests, and grab the key to complete the level.", rowY);
+        rowY = this.addTutorialDivider(rowY);
+
+        rowY = this.addTutorialHeading("1. Moving Around", rowY);
+        rowY = this.addTutorialParagraph("Move your fish around the 3x3 board using W, A, S, and D.", rowY);
+        rowY = this.addTutorialIconLine("w", "W = move up", rowY);
+        rowY = this.addTutorialIconLine("a", "A = move left", rowY);
+        rowY = this.addTutorialIconLine("s", "S = move down", rowY);
+        rowY = this.addTutorialIconLine("d", "D = move right", rowY);
+        rowY = this.addTutorialParagraph("Each move shifts the board and brings in a new tile. Plan carefully. Danger, healing, treasure, and keys can all appear.", rowY);
+
+        rowY = this.addTutorialHeading("2. Your Goal", rowY);
+        rowY = this.addTutorialIconLine("key", "Collect the key to complete the level.", rowY);
+        rowY = this.addTutorialParagraph("Once you grab the key, the level ends and any chests you collected during that level will finally open.", rowY);
+
+        rowY = this.addTutorialHeading("3. Chests and Rewards", rowY);
+        rowY = this.addTutorialIconLine("chest", "Chests are collected during the level, but they do not open right away.", rowY);
+        rowY = this.addTutorialParagraph("To open your collected chests, you must survive and collect the key.", rowY);
+        rowY = this.addTutorialParagraph("If you complete the level, your chests open and give rewards such as:", rowY);
+        rowY = this.addTutorialIconLine("gold", "Gold", rowY);
+        rowY = this.addTutorialIconLine("gem", "Gems", rowY);
+        rowY = this.addTutorialIconLine("medkit", "Medkits", rowY);
+        rowY = this.addTutorialIconLine("rock", "Rocks", rowY);
+        rowY = this.addTutorialIconLine("fish", "Fish pieces", rowY);
+        rowY = this.addTutorialParagraph("If you fail before collecting the key, you lose the chests you collected during that attempt.", rowY);
+
+        rowY = this.addTutorialHeading("4. Approximate Chest Rewards", rowY);
+        rowY = this.addTutorialParagraph("Chest rewards are random. In general:", rowY);
+        rowY = this.addTutorialIconLine("gold", "Gold is the most common reward, about 45%.", rowY);
+        rowY = this.addTutorialIconLine("fish", "Fish pieces are also common, about 30%.", rowY);
+        rowY = this.addTutorialIconLine("medkit", "Medkits are less common, about 10%.", rowY);
+        rowY = this.addTutorialIconLine("rock", "Rocks are less common, about 10%.", rowY);
+        rowY = this.addTutorialIconLine("gem", "Gems are the rarest reward, about 5%.", rowY);
+        rowY = this.addTutorialParagraph("If there are no eligible fish pieces left to drop, the reward pool may shift more toward other rewards.", rowY);
+
+        rowY = this.addTutorialHeading("5. Dangerous Tiles", rowY);
+        rowY = this.addTutorialParagraph("Some tiles damage you when you move onto them.", rowY);
+        rowY = this.addTutorialIconLine("seaweed", "Seaweed", rowY);
+        rowY = this.addTutorialIconLine("waste", "Waste", rowY);
+        rowY = this.addTutorialIconLine("can", "Can", rowY);
+        rowY = this.addTutorialIconLine("lure", "Lure", rowY);
+        rowY = this.addTutorialIconLine("spikes", "Spikes", rowY);
+        rowY = this.addTutorialParagraph("Some hazards deal more damage than others. Lures are especially dangerous.", rowY);
+        rowY = this.addTutorialParagraph("Spikes are tricky because they can switch between safe and dangerous states. Watch whether the spikes are raised or lowered before moving onto them.", rowY);
+
+        rowY = this.addTutorialHeading("6. Healing Tiles", rowY);
+        rowY = this.addTutorialIconLine("worm", "Worms heal your fish.", rowY);
+        rowY = this.addTutorialParagraph("Move onto a worm to recover health. Healing can help you survive longer and make better use of your max health upgrades.", rowY);
+
+        rowY = this.addTutorialHeading("7. Medkits", rowY);
+        rowY = this.addTutorialIconLine("medkit", "Medkits are usable items.", rowY);
+        rowY = this.addTutorialParagraph("Use a medkit to restore health during a level. Medkits are best saved for moments when you are damaged and need a safer path forward.", rowY);
+        rowY = this.addTutorialParagraph("Medkits cannot heal you beyond your maximum health.", rowY);
+
+        rowY = this.addTutorialHeading("8. Rocks", rowY);
+        rowY = this.addTutorialIconLine("rock", "Rocks act like a temporary shield.", rowY);
+        rowY = this.addTutorialParagraph("Using a rock protects you from the next damage you would take. After your next move, the rock shield disappears.", rowY);
+        rowY = this.addTutorialParagraph("Rocks are useful when you need to move through a dangerous tile or when the board gives you no safe options.", rowY);
+
+        rowY = this.addTutorialHeading("9. Failing a Level", rowY);
+        rowY = this.addTutorialParagraph("If your health reaches zero, the level fails.", rowY);
+        rowY = this.addTutorialParagraph("When this happens, you have two choices:", rowY);
+        rowY = this.addTutorialIconLine("gem", "Spend gems to continue.", rowY);
+        rowY = this.addTutorialIconLine("retry", "Retry the level.", rowY);
+        rowY = this.addTutorialParagraph("Continuing restores your health to your upgraded starting health and lets you keep going from the current state.", rowY);
+        rowY = this.addTutorialParagraph("Retrying restarts the level, but you lose any chests collected during that attempt.", rowY);
+
+        rowY = this.addTutorialHeading("10. Gold and Gems", rowY);
+        rowY = this.addTutorialIconLine("gold", "Gold is mainly used for upgrades in the shop.", rowY);
+        rowY = this.addTutorialIconLine("gem", "Gems are used for special purchases, such as unlocking certain fish, buying medkits and rocks, or continuing after failure.", rowY);
+
+        rowY = this.addTutorialHeading("11. The Shop", rowY);
+        rowY = this.addTutorialParagraph("Open the menu to access the shop.", rowY);
+        rowY = this.addTutorialParagraph("In the shop, you can upgrade both Max Health and Starting Health.", rowY);
+        rowY = this.addTutorialParagraph("Max Health increases the highest amount of health you can have.", rowY);
+        rowY = this.addTutorialParagraph("Starting Health increases how much health you begin each level with.", rowY);
+        rowY = this.addTutorialParagraph("Starting Health cannot reach your full Max Health. It will always stay at least 5 points below your Max Health.", rowY);
+        rowY = this.addTutorialParagraph("Examples: 25 Max Health allows 20 Starting Health. 40 Max Health allows 35 Starting Health. 60 Max Health allows 55 Starting Health.", rowY);
+        rowY = this.addTutorialParagraph("Upgrades get more expensive as they get stronger. Medkits and rocks can also be purchased for 5 gems each.", rowY);
+
+        rowY = this.addTutorialHeading("12. Unlocking Fish", rowY);
+        rowY = this.addTutorialIconLine("fish", "You can unlock new fish by collecting fish pieces from chests or buying certain fish with gems.", rowY);
+        rowY = this.addTutorialParagraph("Some fish are unlocked by collecting enough pieces.", rowY);
+        rowY = this.addTutorialIconLine("minnow", "Minnow Pieces: 3/10", rowY);
+        rowY = this.addTutorialParagraph("Once you collect enough pieces, that fish becomes unlocked. Other fish can be bought directly with gems.", rowY);
+        rowY = this.addTutorialParagraph("Some special fish require another fish to be unlocked first.", rowY);
+        rowY = this.addTutorialParagraph("Once a fish is unlocked, you can select it from the fish unlock menu. Changing fish is cosmetic, so you can switch fish whenever you want without affecting the level.", rowY);
+
+        rowY = this.addTutorialHeading("13. Quick Tips", rowY);
+        rowY = this.addTutorialParagraph("Collecting chests is useful, but only if you survive long enough to grab the key.", rowY);
+        rowY = this.addTutorialParagraph("Use rocks when you are forced into danger.", rowY);
+        rowY = this.addTutorialParagraph("Use medkits before your health gets too low.", rowY);
+        rowY = this.addTutorialParagraph("Gold helps you grow stronger over time.", rowY);
+        rowY = this.addTutorialParagraph("Gems are rare, so save them for important unlocks or emergency continues.", rowY);
+        rowY = this.addTutorialParagraph("If a fish needs pieces, keep opening chests.", rowY);
+        rowY = this.addTutorialParagraph("If a fish says it requires another fish, unlock that required fish first.", rowY);
+        rowY = this.addTutorialParagraph("Most importantly: every move changes the board, so look ahead before swimming!", rowY);
+
+        const visibleHeight = 440;
+        this.tutorialMaxScroll = Math.max(0, rowY - visibleHeight);
+        this.tutorialListContainer.y = -205;
+    }
+
+    addTutorialTitle(text, rowY) {
+        const titleText = this.add.text(
+            0,
+            rowY,
+            text,
+            {
+                fontFamily: "Arial",
+                fontSize: "27px",
+                color: "#ffeaa7",
+                stroke: "#000000",
+                strokeThickness: 5,
+                wordWrap: {
+                    width: 610
+                }
+            }
+        );
+
+        titleText.setOrigin(0, 0);
+        this.tutorialListContainer.add(titleText);
+
+        return rowY + titleText.height + 16;
+    }
+
+    addTutorialHeading(text, rowY) {
+        const headingText = this.add.text(
+            0,
+            rowY + 10,
+            text,
+            {
+                fontFamily: "Arial",
+                fontSize: "24px",
+                color: "#9be8ff",
+                stroke: "#000000",
+                strokeThickness: 5,
+                wordWrap: {
+                    width: 610
+                }
+            }
+        );
+
+        headingText.setOrigin(0, 0);
+        this.tutorialListContainer.add(headingText);
+
+        return rowY + headingText.height + 24;
+    }
+
+    addTutorialParagraph(text, rowY) {
+        const paragraphText = this.add.text(
+            0,
+            rowY,
+            text,
+            {
+                fontFamily: "Arial",
+                fontSize: "18px",
+                color: "#ffffff",
+                stroke: "#000000",
+                strokeThickness: 4,
+                lineSpacing: 5,
+                wordWrap: {
+                    width: 610
+                }
+            }
+        );
+
+        paragraphText.setOrigin(0, 0);
+        this.tutorialListContainer.add(paragraphText);
+
+        return rowY + paragraphText.height + 12;
+    }
+
+    addTutorialIconLine(iconName, text, rowY) {
+        const row = this.add.container(0, rowY);
+        const icon = this.createTutorialIcon(iconName);
+        icon.setPosition(18, 18);
+
+        const lineText = this.add.text(
+            48,
+            0,
+            text,
+            {
+                fontFamily: "Arial",
+                fontSize: "18px",
+                color: "#ffffff",
+                stroke: "#000000",
+                strokeThickness: 4,
+                lineSpacing: 5,
+                wordWrap: {
+                    width: 560
+                }
+            }
+        );
+
+        lineText.setOrigin(0, 0);
+        row.add([icon, lineText]);
+        this.tutorialListContainer.add(row);
+
+        return rowY + Math.max(40, lineText.height + 8);
+    }
+
+    addTutorialDivider(rowY) {
+        const divider = this.add.rectangle(
+            305,
+            rowY + 8,
+            610,
+            2,
+            0xffffff,
+            0.18
+        );
+
+        this.tutorialListContainer.add(divider);
+
+        return rowY + 26;
+    }
+
+    createTutorialIcon(iconName) {
+        const iconContainer = this.add.container(0, 0);
+        const iconMap = {
+            key: "key",
+            chest: "loot",
+            gold: "gold",
+            gem: "gem",
+            medkit: "medKit",
+            rock: "rock",
+            fish: "anchovy",
+            seaweed: "enemySeaweed",
+            waste: "enemyWaste",
+            can: "enemyCan",
+            lure: "enemyLure",
+            spikes: "spikesHigh",
+            worm: "worm",
+            minnow: "minnow"
+        };
+
+        const textureKey = iconMap[iconName];
+
+        if (textureKey && this.textures.exists(textureKey)) {
+            const sprite = this.add.image(0, 0, textureKey);
+            this.fitSpriteToCell(sprite, 34, 34);
+            iconContainer.add(sprite);
+            return iconContainer;
+        }
+
+        const placeholder = this.add.rectangle(0, 0, 34, 34, 0x000000, 0.34);
+        placeholder.setStrokeStyle(2, 0xffffff, 0.26);
+
+        const label = this.add.text(
+            0,
+            0,
+            iconName.toUpperCase().slice(0, 1),
+            {
+                fontFamily: "Arial",
+                fontSize: "16px",
+                color: "#ffffff",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 4
+            }
+        );
+
+        label.setOrigin(0.5);
+        iconContainer.add([placeholder, label]);
+
+        return iconContainer;
+    }
+
+    scrollTutorial(deltaY) {
+        if (!this.homeTutorialOverlay || !this.tutorialListContainer) {
+            return;
+        }
+
+        this.tutorialScrollY = Phaser.Math.Clamp(
+            this.tutorialScrollY + deltaY,
+            0,
+            this.tutorialMaxScroll
+        );
+
+        this.tutorialListContainer.y = -205 - this.tutorialScrollY;
     }
 
     startGameFromHome() {
