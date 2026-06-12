@@ -46,13 +46,211 @@ class Swipe extends Phaser.Scene {
         this.load.image("spikesHigh", "./assets/spikesHigh.png");
         this.load.image("spikesLow", "./assets/spikesLow.png");
         this.load.image("spikesDown", "./assets/spikesDown.png");
+
     }
     create() {
+        this.uiFontFamily = "\"Trebuchet MS\", Verdana, Arial, sans-serif";
+        this.installTextDefaults();
         this.createHomeScreen();
+        this.createStartupWaitOverlay();
+    }
+
+    createStartupWaitOverlay() {
+        this.startupWaitOverlay = this.add.container(0, 0);
+        this.startupWaitOverlay.setDepth(3000);
+
+        const bg = this.add.rectangle(
+            this.game.config.width / 2,
+            this.game.config.height / 2,
+            this.game.config.width,
+            this.game.config.height,
+            0x000000,
+            1
+        );
+
+        bg.setInteractive();
+
+        const waitText = this.add.text(
+            this.game.config.width / 2,
+            this.game.config.height / 2,
+            "Please wait...",
+            {
+                fontFamily: "Arial",
+                fontSize: "38px",
+                color: "#ffffff",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 6
+            }
+        );
+
+        waitText.setOrigin(0.5);
+        this.startupWaitOverlay.add([bg, waitText]);
+
+        let dotCount = 0;
+
+        this.startupWaitDotsEvent = this.time.addEvent({
+            delay: 350,
+            loop: true,
+            callback: () => {
+                dotCount = (dotCount + 1) % 4;
+                waitText.setText(`Please wait${".".repeat(dotCount)}`);
+            }
+        });
+
+        this.time.delayedCall(10000, () => {
+            this.closeStartupWaitOverlay();
+        });
+    }
+
+    closeStartupWaitOverlay() {
+        if (this.startupWaitDotsEvent) {
+            this.startupWaitDotsEvent.remove(false);
+            this.startupWaitDotsEvent = null;
+        }
+
+        if (this.startupWaitOverlay) {
+            this.startupWaitOverlay.destroy(true);
+            this.startupWaitOverlay = null;
+        }
+    }
+
+    installTextDefaults() {
+        if (this.textDefaultsInstalled) {
+            return;
+        }
+
+        this.textDefaultsInstalled = true;
+
+        const originalAddText = this.add.text.bind(this.add);
+
+        this.add.text = (x, y, text, style = {}) => {
+            return originalAddText(
+                x,
+                y,
+                text,
+                {
+                    ...style,
+                    fontFamily: this.uiFontFamily,
+                    resolution: style.resolution || 2
+                }
+            );
+        };
+    }
+
+    getAudioDefinitions() {
+        return [
+            { key: "clickSound", file: "click.mp3" },
+            { key: "fishFlopSound", file: "fishFlop.mp3" },
+            { key: "spikesSound", file: "spikes.mp3" },
+            { key: "levelCompleteSound", file: "levelComplete.mp3" },
+            { key: "chestSound", file: "chest.mp3" },
+            { key: "keySound", file: "key.mp3" },
+            { key: "unlockSound", file: "unlock.mp3" },
+            { key: "fishSelectSound", file: "fishSelect.mp3" },
+            { key: "bubblesSound", file: "bubbles.mp3" },
+            { key: "medKitSound", file: "medKit.mp3" },
+            { key: "rockSound", file: "rock.mp3" },
+            { key: "healthPurchaseSound", file: "healthPurchase.mp3" },
+            { key: "titleScreenBGM", file: "titleScreenBGM.mp3" },
+            { key: "gameplayBGM", file: "gameplayBGM.mp3" }
+        ];
+    }
+
+    startAudioLoading() {
+        if (this.audioLoadStarted || this.audioLoadComplete) {
+            return;
+        }
+
+        this.audioLoadStarted = true;
+
+        let queuedAudio = false;
+
+        for (const audio of this.getAudioDefinitions()) {
+            if (!this.cache.audio.exists(audio.key)) {
+                this.load.audio(audio.key, `./assets/${audio.file}`);
+                queuedAudio = true;
+            }
+        }
+
+        if (!queuedAudio) {
+            this.audioLoadComplete = true;
+            return;
+        }
+
+        this.load.once("complete", () => {
+            this.audioLoadComplete = true;
+
+            if (this.pendingBgmKey) {
+                const pendingKey = this.pendingBgmKey;
+                this.pendingBgmKey = null;
+                this.playBgm(pendingKey);
+            }
+        });
+
+        this.load.start();
+    }
+
+    playSfx(key, config = {}) {
+        if (!this.sound || !this.cache.audio.exists(key)) {
+            this.startAudioLoading();
+            return;
+        }
+
+        this.sound.play(key, config);
+    }
+
+    playClickSound() {
+        this.playSfx("clickSound", { volume: 0.65 });
+    }
+
+    playBubblesSound() {
+        if (!this.sound || !this.cache.audio.exists("bubblesSound")) {
+            return;
+        }
+
+        const existingBubbles = this.sound.get("bubblesSound");
+
+        if (existingBubbles && existingBubbles.isPlaying) {
+            existingBubbles.stop();
+        }
+
+        this.sound.play("bubblesSound", { volume: 0.5 });
+    }
+
+    playBgm(key) {
+        if (!this.sound || !this.cache.audio.exists(key)) {
+            this.pendingBgmKey = key;
+            this.startAudioLoading();
+            return;
+        }
+
+        if (this.currentBgmKey === key && this.currentBgm && this.currentBgm.isPlaying) {
+            return;
+        }
+
+        if (this.currentBgm) {
+            this.currentBgm.stop();
+            this.currentBgm.destroy();
+            this.currentBgm = null;
+        }
+
+        this.currentBgmKey = key;
+        this.currentBgm = this.sound.add(key, {
+            loop: true,
+            volume: 0.42
+        });
+
+        this.currentBgm.play();
     }
 
     createHomeScreen() {
         this.homeScreenOpen = true;
+        this.playBgm("titleScreenBGM");
+
+        if (this.homeOverlay) {
+            this.homeOverlay.destroy();
+        }
 
         this.homeOverlay = this.add.container(0, 0);
         this.homeOverlay.setDepth(1000);
@@ -60,10 +258,11 @@ class Swipe extends Phaser.Scene {
         const bg = this.add.image(0, 0, "titleScreenBG").setOrigin(0, 0);
         bg.displayWidth = this.game.config.width;
         bg.displayHeight = this.game.config.height;
+        bg.setInteractive();
 
         const title = this.add.text(
             this.game.config.width / 2,
-            105,
+            145,
             "Aquarigrid",
             {
                 fontFamily: "Arial",
@@ -76,6 +275,13 @@ class Swipe extends Phaser.Scene {
         );
 
         title.setOrigin(0.5);
+
+        const titleFish = [
+            this.createTitleFish("anchovy", 120, this.game.config.height - 115, 4.2, 95, 14, 3900, true),
+            this.createTitleFish("clownfish", this.game.config.width - 130, 170, 4.4, 85, 12, 4200, true),
+            this.createTitleFish("starfish", 120, 175, 4.3, 72, 16, 3600, false),
+            this.createTitleFish("blueAngelfish", this.game.config.width - 135, this.game.config.height - 120, 4.4, 90, 13, 4400, true)
+        ];
 
         const playButton = this.createHomeButton(
             this.game.config.width / 2,
@@ -111,11 +317,12 @@ class Swipe extends Phaser.Scene {
             () => {}
         );
 
-        this.homeOverlay.add([bg, title, playButton, tutorialButton, creditsButton]);
+        this.homeOverlay.add([bg, title, ...titleFish, playButton, tutorialButton, creditsButton]);
     }
 
     createHomeButton(x, y, width, height, label, color, callback) {
         const button = this.add.container(x, y);
+        button.baseScale = 1;
 
         const bg = this.add.rectangle(
             0,
@@ -144,11 +351,81 @@ class Swipe extends Phaser.Scene {
         );
 
         text.setOrigin(0.5);
-        bg.on("pointerdown", callback);
+
+        bg.on("pointerover", () => {
+            this.playBubblesSound();
+
+            bg.setFillStyle(0xffffff, 0.18);
+            bg.setStrokeStyle(4, 0xffffff, 0.72);
+            text.setColor("#ffffff");
+
+            this.tweens.add({
+                targets: button,
+                scaleX: 1.045,
+                scaleY: 1.045,
+                duration: 120,
+                ease: "Sine.easeOut"
+            });
+        });
+
+        bg.on("pointerout", () => {
+            bg.setFillStyle(0x000000, 0.42);
+            bg.setStrokeStyle(3, 0xffffff, 0.28);
+            text.setColor(color);
+
+            this.tweens.add({
+                targets: button,
+                scaleX: button.baseScale,
+                scaleY: button.baseScale,
+                duration: 120,
+                ease: "Sine.easeOut"
+            });
+        });
+
+        bg.on("pointerdown", () => {
+            this.playClickSound();
+            callback();
+        });
 
         button.add([bg, text]);
 
         return button;
+    }
+
+    createTitleFish(textureKey, x, y, scale, swimDistance, bobDistance, duration, shouldFlip) {
+        const fish = this.add.image(x, y, textureKey);
+        fish.setScale(scale);
+
+        this.tweens.add({
+            targets: fish,
+            x: x + swimDistance,
+            y: y - bobDistance,
+            duration: duration,
+            ease: "Sine.easeInOut",
+            yoyo: true,
+            repeat: -1,
+            onYoyo: () => {
+                if (shouldFlip) {
+                    fish.setFlipX(true);
+                }
+            },
+            onRepeat: () => {
+                if (shouldFlip) {
+                    fish.setFlipX(false);
+                }
+            }
+        });
+
+        this.tweens.add({
+            targets: fish,
+            angle: shouldFlip ? 2.5 : 7,
+            duration: duration / 3,
+            ease: "Sine.easeInOut",
+            yoyo: true,
+            repeat: -1
+        });
+
+        return fish;
     }
 
     openTutorialPlaceholder() {
@@ -171,6 +448,8 @@ class Swipe extends Phaser.Scene {
             0x000000,
             0.45
         );
+
+        backdrop.setInteractive();
 
         const panel = this.add.rectangle(
             0,
@@ -222,10 +501,16 @@ class Swipe extends Phaser.Scene {
         }
 
         this.homeScreenOpen = false;
-        this.createGame();
+        this.playBgm("gameplayBGM");
+
+        if (!this.gameStarted) {
+            this.createGame();
+        }
     }
 
     createGame() {
+        this.gameStarted = true;
+
         this.boardImage = this.add.image(0, 0, "board").setOrigin(0, 0);
 
         this.boardImage.displayWidth = this.game.config.width;
@@ -556,6 +841,7 @@ class Swipe extends Phaser.Scene {
             enter: Phaser.Input.Keyboard.KeyCodes.ENTER,
             u: Phaser.Input.Keyboard.KeyCodes.U,
             s: Phaser.Input.Keyboard.KeyCodes.S,
+            t: Phaser.Input.Keyboard.KeyCodes.T,
             c: Phaser.Input.Keyboard.KeyCodes.C,
             r: Phaser.Input.Keyboard.KeyCodes.R,
             y: Phaser.Input.Keyboard.KeyCodes.Y,
@@ -624,6 +910,12 @@ class Swipe extends Phaser.Scene {
                 } else {
                     this.openShop();
                 }
+            }
+
+            if (Phaser.Input.Keyboard.JustDown(this.keys.t)) {
+                this.closeMenu();
+                this.createHomeScreen();
+                return;
             }
 
             if (Phaser.Input.Keyboard.JustDown(this.keys.up)) {
@@ -720,6 +1012,7 @@ class Swipe extends Phaser.Scene {
         this.menuButton.setInteractive({ useHandCursor: true });
 
         this.menuButton.on("pointerdown", () => {
+            this.playClickSound();
             this.openMenu();
         });
 
@@ -873,7 +1166,7 @@ class Swipe extends Phaser.Scene {
         this.menuText = this.add.text(
             0,
             0,
-            "MENU\n\nPress U to see unlocks\nPress S to open shop\nPress ENTER to go back",
+            "MENU\n\nPress U to see unlocks\nPress S to open shop\nPress T for title screen\nPress ENTER to go back",
             {
                 fontFamily: "Arial",
                 fontSize: "42px",
@@ -1343,7 +1636,10 @@ class Swipe extends Phaser.Scene {
 
         if (config.canUpgrade) {
             button.setInteractive({ useHandCursor: true });
-            button.on("pointerdown", config.onPurchase);
+            button.on("pointerdown", () => {
+                this.playClickSound();
+                config.onPurchase();
+            });
         }
 
         row.add([panel, titleText, valueText, costText, button, buttonText]);
@@ -1399,6 +1695,10 @@ class Swipe extends Phaser.Scene {
         this.goldCount -= cost;
         this.playerMaxHealth++;
 
+        this.time.delayedCall(110, () => {
+            this.playSfx("healthPurchaseSound", { volume: 0.7 });
+        });
+
         this.updateHealthText();
         this.updateUI();
         this.populateShop();
@@ -1420,6 +1720,10 @@ class Swipe extends Phaser.Scene {
 
         this.goldCount -= cost;
         this.playerStartingHealth++;
+
+        this.time.delayedCall(110, () => {
+            this.playSfx("healthPurchaseSound", { volume: 0.7 });
+        });
 
         this.updateHealthText();
         this.updateUI();
@@ -1483,10 +1787,16 @@ class Swipe extends Phaser.Scene {
             return;
         }
 
+        const fishChanged = fishKey !== this.currentFishKey;
+
         this.currentFishKey = fishKey;
 
         if (this.player) {
             this.player.setTexture(this.currentFishKey);
+        }
+
+        if (fishChanged) {
+            this.playSfx("fishSelectSound", { volume: 0.7 });
         }
 
         if (this.unlockMenuOpen) {
@@ -1613,7 +1923,10 @@ class Swipe extends Phaser.Scene {
 
         text.setOrigin(0.5);
 
-        bg.on("pointerdown", callback);
+        bg.on("pointerdown", () => {
+            this.playClickSound();
+            callback();
+        });
 
         button.add([bg, text]);
 
@@ -1636,6 +1949,7 @@ class Swipe extends Phaser.Scene {
 
         this.gemCount -= fish.price;
         this.unlockedFishKeys[fish.key] = true;
+        this.playSfx("unlockSound", { volume: 0.75 });
 
         this.cancelFishPurchase();
         this.updateUI();
@@ -2255,6 +2569,8 @@ class Swipe extends Phaser.Scene {
             return;
         }
 
+        this.playSfx("medKitSound", { volume: 0.75 });
+
         this.medKitCount--;
         this.changePlayerHealth(10);
         this.updateUI();
@@ -2277,12 +2593,16 @@ class Swipe extends Phaser.Scene {
             return;
         }
 
+        this.playSfx("rockSound", { volume: 0.75 });
+
         this.rockCount--;
         this.rockShieldActive = true;
         this.updateUI();
 
         this.flyItemToPlayer("rock", this.rockUI.icon, () => {
-            this.attachRockShieldToPlayer();
+            if (this.rockShieldActive) {
+                this.attachRockShieldToPlayer();
+            }
         });
     }
 
@@ -2327,7 +2647,7 @@ class Swipe extends Phaser.Scene {
     }
 
     removeRockShield() {
-        if (!this.rockShieldActive) {
+        if (!this.rockShieldActive && !this.rockShieldSprite) {
             return;
         }
 
@@ -2393,6 +2713,10 @@ class Swipe extends Phaser.Scene {
 
         const playerDied = this.playerHealth <= 0;
 
+        if (this.rockShieldActive) {
+            this.removeRockShield();
+        }
+
         this.playerGridPos.row = newRow;
         this.playerGridPos.col = newCol;
 
@@ -2409,10 +2733,6 @@ class Swipe extends Phaser.Scene {
             duration: this.timing.moveDuration,
             ease: "Sine.easeInOut"
         });
-
-        if (this.rockShieldActive) {
-            this.removeRockShield();
-        }
 
         if (consumedKey) {
             this.time.delayedCall(this.timing.turnUnlockDelay, () => {
@@ -2437,6 +2757,7 @@ class Swipe extends Phaser.Scene {
         this.levelEnded = true;
         this.isMoving = true;
         this.levelRewardOpen = true;
+        this.playSfx("levelCompleteSound", { volume: 0.78 });
 
         const rewards = this.openLevelChests();
 
@@ -2460,6 +2781,7 @@ class Swipe extends Phaser.Scene {
         this.levelEnded = true;
         this.isMoving = true;
         this.failChoiceOpen = true;
+        this.playSfx("fishFlopSound", { volume: 0.78 });
 
         this.showLevelResult("LEVEL FAILED", [
             `You collected ${this.chestsCollected}/${this.levelConfig.maxChests} chests`,
@@ -2788,7 +3110,10 @@ class Swipe extends Phaser.Scene {
 
         text.setOrigin(0.5);
 
-        bg.on("pointerdown", callback);
+        bg.on("pointerdown", () => {
+            this.playClickSound();
+            callback();
+        });
 
         button.add([bg, text]);
 
@@ -3198,12 +3523,14 @@ class Swipe extends Phaser.Scene {
         }
 
         if (tile.type === "loot") {
+            this.playSfx("chestSound", { volume: 0.72 });
             this.chestsCollected++;
             console.log(`Pending chests: ${this.chestsCollected}/${this.levelConfig.maxChests}`);
             this.updateUI();
         }
 
         if (tile.type === "key") {
+            this.playSfx("keySound", { volume: 0.72 });
             this.keyCollected = 1;
             this.updateUI();
         }
@@ -3355,6 +3682,7 @@ class Swipe extends Phaser.Scene {
 
         if (newPieces >= fish.piecesRequired) {
             this.unlockedFishKeys[fish.key] = true;
+            this.playSfx("unlockSound", { volume: 0.75 });
 
             return {
                 type: "fishPieces",
@@ -3665,17 +3993,24 @@ class Swipe extends Phaser.Scene {
     // -------------------------------
 
     toggleAllSpikes() {
+        let spikeChanged = false;
+
         for (let row = 0; row < this.grid.rows; row++) {
             for (let col = 0; col < this.grid.cols; col++) {
                 const tile = this.board[row][col];
 
                 if (tile !== null && tile.type === "spikes") {
+                    spikeChanged = true;
                     const newActiveState = !tile.active;
                     this.animateSpikeTile(tile, newActiveState);
                     tile.active = newActiveState;
                     this.updateSpikeDamageDisplay(tile);
                 }
             }
+        }
+
+        if (spikeChanged) {
+            this.playSfx("spikesSound", { volume: 0.72 });
         }
     }
 
