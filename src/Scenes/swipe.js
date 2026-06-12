@@ -227,11 +227,11 @@ class Swipe extends Phaser.Scene {
         const fishDefinitions = this.getFishDefinitions();
 
         this.currentLevel = this.getSavedInteger(saveData.currentLevel, this.currentLevel, 1);
-        this.goldCount = this.getSavedInteger(saveData.goldCount, this.goldCount, 0);
-        this.gemCount = this.getSavedInteger(saveData.gemCount, this.gemCount, 0);
-        this.keyCount = this.getSavedInteger(saveData.keyCount, this.keyCount, 0);
-        this.medKitCount = this.getSavedInteger(saveData.medKitCount, this.medKitCount, 0);
-        this.rockCount = this.getSavedInteger(saveData.rockCount, this.rockCount, 0);
+        this.goldCount = this.getSavedInteger(saveData.goldCount, this.goldCount, 0, this.resourceCaps.gold);
+        this.gemCount = this.getSavedInteger(saveData.gemCount, this.gemCount, 0, this.resourceCaps.gems);
+        this.keyCount = this.getSavedInteger(saveData.keyCount, this.keyCount, 0, this.resourceCaps.keys);
+        this.medKitCount = this.getSavedInteger(saveData.medKitCount, this.medKitCount, 0, this.resourceCaps.medKit);
+        this.rockCount = this.getSavedInteger(saveData.rockCount, this.rockCount, 0, this.resourceCaps.rock);
 
         const savedUnlockedFish = saveData.unlockedFishKeys || {};
         this.unlockedFishKeys = {
@@ -302,6 +302,61 @@ class Swipe extends Phaser.Scene {
                 Math.floor(value)
             )
         );
+    }
+
+    getResourceProperty(resourceKey) {
+        return {
+            gold: "goldCount",
+            gems: "gemCount",
+            medKit: "medKitCount",
+            rock: "rockCount",
+            keys: "keyCount"
+        }[resourceKey];
+    }
+
+    getResourceDisplayName(resourceKey) {
+        return {
+            gold: "Gold",
+            gems: "Gems",
+            medKit: "Med Kits",
+            rock: "Rocks",
+            keys: "Keys"
+        }[resourceKey] || "Resource";
+    }
+
+    isResourceAtLimit(resourceKey) {
+        const property = this.getResourceProperty(resourceKey);
+
+        if (!property) {
+            return false;
+        }
+
+        return this[property] >= this.resourceCaps[resourceKey];
+    }
+
+    showResourceLimitMessage(resourceKey) {
+        this.showChestRewardMessage(`Reached limit for ${this.getResourceDisplayName(resourceKey)}`);
+    }
+
+    addResource(resourceKey, amount) {
+        const property = this.getResourceProperty(resourceKey);
+
+        if (!property) {
+            return 0;
+        }
+
+        const cap = this.resourceCaps[resourceKey];
+        const currentAmount = this[property];
+        const nextAmount = Math.min(cap, currentAmount + amount);
+        const amountAdded = nextAmount - currentAmount;
+
+        this[property] = nextAmount;
+
+        if (currentAmount + amount >= cap) {
+            this.showResourceLimitMessage(resourceKey);
+        }
+
+        return amountAdded;
     }
 
     getAudioDefinitions() {
@@ -1571,6 +1626,8 @@ class Swipe extends Phaser.Scene {
 
             keyNoSpawnTurns: 5,
             earlyKeyLuckyWeight: 0,
+            firstLevelMaxDamage: 5,
+            firstLevelForceKeyTurn: 29,
 
             spawnWeights: {
                 spikes: 34,
@@ -1701,6 +1758,14 @@ class Swipe extends Phaser.Scene {
             rockGemCost: 5
         };
 
+        this.resourceCaps = {
+            gold: 999999,
+            gems: 99999,
+            medKit: 200,
+            rock: 200,
+            keys: 1000
+        };
+
         // -------------------------------
         // PERSISTENT / RUN STATE
         // -------------------------------
@@ -1769,6 +1834,7 @@ class Swipe extends Phaser.Scene {
         this.chestsSpawned = 0;
         this.chestsCollected = 0;
         this.keyCollected = 0;
+        this.keyHasSpawnedThisLevel = false;
 
         this.rockShieldActive = false;
         this.rockShieldSprite = null;
@@ -3179,35 +3245,53 @@ class Swipe extends Phaser.Scene {
     purchaseMedKit() {
         const cost = this.shopItemConfig.medKitGemCost;
 
+        if (this.isResourceAtLimit("medKit")) {
+            this.showResourceLimitMessage("medKit");
+            return;
+        }
+
         if (this.gemCount < cost) {
             this.showChestRewardMessage("Not enough gems");
             return;
         }
 
         this.gemCount -= cost;
-        this.medKitCount++;
+        this.addResource("medKit", 1);
 
         this.updateUI();
         this.populateShop();
         this.saveProgress();
-        this.showChestRewardMessage("Purchased Med Kit");
+        this.showChestRewardMessage(
+            this.isResourceAtLimit("medKit")
+                ? `Reached limit for ${this.getResourceDisplayName("medKit")}`
+                : "Purchased Med Kit"
+        );
     }
 
     purchaseRock() {
         const cost = this.shopItemConfig.rockGemCost;
 
+        if (this.isResourceAtLimit("rock")) {
+            this.showResourceLimitMessage("rock");
+            return;
+        }
+
         if (this.gemCount < cost) {
             this.showChestRewardMessage("Not enough gems");
             return;
         }
 
         this.gemCount -= cost;
-        this.rockCount++;
+        this.addResource("rock", 1);
 
         this.updateUI();
         this.populateShop();
         this.saveProgress();
-        this.showChestRewardMessage("Purchased Rock");
+        this.showChestRewardMessage(
+            this.isResourceAtLimit("rock")
+                ? `Reached limit for ${this.getResourceDisplayName("rock")}`
+                : "Purchased Rock"
+        );
     }
 
     purchaseFishPieceWithKey(fishKey) {
@@ -4296,7 +4380,7 @@ class Swipe extends Phaser.Scene {
         this.levelEnded = true;
         this.isMoving = true;
         this.levelRewardOpen = true;
-        this.keyCount++;
+        this.addResource("keys", 1);
         this.playSfx("levelCompleteSound", { volume: 0.78 });
 
         const rewards = this.openLevelChests();
@@ -4698,6 +4782,7 @@ class Swipe extends Phaser.Scene {
         this.chestsSpawned = 0;
         this.chestsCollected = 0;
         this.keyCollected = 0;
+        this.keyHasSpawnedThisLevel = false;
 
         this.rockShieldActive = false;
 
@@ -4793,6 +4878,15 @@ class Swipe extends Phaser.Scene {
     getAdjustedSpawnWeights() {
         const weights = { ...this.levelConfig.spawnWeights };
 
+        if (this.shouldForceFirstLevelKeySpawn()) {
+            for (const type in weights) {
+                weights[type] = 0;
+            }
+
+            weights.key = 1;
+            return weights;
+        }
+
         if (this.isInitializingBoard) {
             weights.key = 0;
         } else if (this.turnCount <= this.levelConfig.keyNoSpawnTurns) {
@@ -4812,6 +4906,15 @@ class Swipe extends Phaser.Scene {
         }
 
         return weights;
+    }
+
+    shouldForceFirstLevelKeySpawn() {
+        return (
+            this.currentLevel === 1 &&
+            !this.isInitializingBoard &&
+            !this.keyHasSpawnedThisLevel &&
+            this.turnCount === this.levelConfig.firstLevelForceKeyTurn
+        );
     }
 
     countTilesOfType(type) {
@@ -4872,6 +4975,11 @@ class Swipe extends Phaser.Scene {
 
         if (this.isDamageTile(type)) {
             tile.damage = this.getDamageForTileType(type);
+
+            if (this.currentLevel === 1) {
+                tile.damage = Math.min(tile.damage, this.levelConfig.firstLevelMaxDamage);
+            }
+
             tile.valueText = this.createTileValueText(`${tile.damage}`, "#ff3030");
             container.add(tile.valueText);
         }
@@ -4886,6 +4994,10 @@ class Swipe extends Phaser.Scene {
             this.chestsSpawned++;
             this.turnsSinceLastChestSpawn = 0;
             console.log(`Chest spawned: ${this.chestsSpawned}/${this.levelConfig.maxChests}`);
+        }
+
+        if (type === "key") {
+            this.keyHasSpawnedThisLevel = true;
         }
 
         return tile;
@@ -5161,9 +5273,8 @@ class Swipe extends Phaser.Scene {
     }
 
     rewardGold() {
-        const amount = this.getGoldDropAmount();
+        const amount = this.addResource("gold", this.getGoldDropAmount());
 
-        this.goldCount += amount;
 
         return {
             type: "gold",
@@ -5175,9 +5286,8 @@ class Swipe extends Phaser.Scene {
     }
 
     rewardGems() {
-        const amount = this.pickWeightedValue(this.chestRewardConfig.gemDropValues);
+        const amount = this.addResource("gems", this.pickWeightedValue(this.chestRewardConfig.gemDropValues));
 
-        this.gemCount += amount;
 
         return {
             type: "gems",
@@ -5189,9 +5299,8 @@ class Swipe extends Phaser.Scene {
     }
 
     rewardFullChestBonus() {
-        const amount = this.chestRewardConfig.fullChestBonusGems;
+        const amount = this.addResource("gems", this.chestRewardConfig.fullChestBonusGems);
 
-        this.gemCount += amount;
 
         return {
             type: "fullChestBonus",
@@ -5203,25 +5312,25 @@ class Swipe extends Phaser.Scene {
     }
 
     rewardMedKit() {
-        this.medKitCount++;
+        const amount = this.addResource("medKit", 1);
 
         return {
             type: "medKit",
             iconKey: "medKit",
-            amount: 1,
-            topText: "+1",
+            amount: amount,
+            topText: `+${amount}`,
             bottomText: "Med Kit"
         };
     }
 
     rewardRock() {
-        this.rockCount++;
+        const amount = this.addResource("rock", 1);
 
         return {
             type: "rock",
             iconKey: "rock",
-            amount: 1,
-            topText: "+1",
+            amount: amount,
+            topText: `+${amount}`,
             bottomText: "Rock"
         };
     }
@@ -5301,7 +5410,7 @@ class Swipe extends Phaser.Scene {
             160
         );
 
-        this.chestRewardToast.setDepth(this.menuOpen ? 760 : 420);
+        this.chestRewardToast.setDepth((this.menuOpen || this.levelRewardOpen) ? 760 : 420);
 
         const bg = this.add.rectangle(
             0,
