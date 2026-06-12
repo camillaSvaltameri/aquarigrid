@@ -953,13 +953,13 @@ class Swipe extends Phaser.Scene {
         this.creditsListContainer.removeAll(true);
 
         const creditLines = [
-            { label: "Game", detail: "By [Your Name]" },
+            { label: "Game", detail: "By Camilla Shen" },
             { label: "Visual Assets", detail: "Pixel Gnome" },
             { label: "Visual Assets", detail: "Kenney Assets" },
             { label: "Audio Assets", detail: "Pixabay" },
             { label: "Background Music", detail: "Stream Cafe" },
             { label: "Ocean Background", detail: "Magnific wallpaper" },
-            { label: "Asset Licensing", detail: "Royalty-free assets used throughout" }
+            { label: "Asset Licensing", detail: "Royalty free assets used throughout" }
         ];
 
         let rowY = 0;
