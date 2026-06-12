@@ -483,6 +483,15 @@ class Swipe extends Phaser.Scene {
 
         title.setOrigin(0.5);
 
+        this.tweens.add({
+            targets: title,
+            y: title.y + 8,
+            duration: 1800,
+            ease: "Sine.easeInOut",
+            yoyo: true,
+            repeat: -1
+        });
+
         const titleFish = [
             this.createTitleFish("anchovy", 105, this.game.config.height - 118, 3.8, 82, 12, 4300, true, {
                 startFlipX: false,
@@ -889,13 +898,13 @@ class Swipe extends Phaser.Scene {
         this.creditsListContainer.removeAll(true);
 
         const creditLines = [
-            { label: "Game", detail: "By Camilla Shen" },
+            { label: "Game", detail: "By [Your Name]" },
             { label: "Visual Assets", detail: "Pixel Gnome" },
             { label: "Visual Assets", detail: "Kenney Assets" },
             { label: "Audio Assets", detail: "Pixabay" },
             { label: "Background Music", detail: "Stream Cafe" },
             { label: "Ocean Background", detail: "Magnific wallpaper" },
-            { label: "Asset Licensing", detail: "Royalty free assets used throughout" }
+            { label: "Asset Licensing", detail: "Royalty-free assets used throughout" }
         ];
 
         let rowY = 0;
@@ -1697,23 +1706,23 @@ class Swipe extends Phaser.Scene {
         // -------------------------------
         this.currentLevel = 1;
 
-        //!ACTUAL GAMEPLAY VALUES!
-        //this.goldCount = 5000;
-        //this.gemCount = 100;
-        //this.keyCount = 0;
+        //ACTUAL GAMEPLAY VALUES!
+        this.goldCount = 8000;
+        this.gemCount = 200;
+        this.keyCount = 0;
 
         //DEBUG ONLY
-        this.goldCount = 50000;
-        this.gemCount = 5000;
-        this.keyCount = 1000;
+        //this.goldCount = 50000;
+        //this.gemCount = 5000;
+        //this.keyCount = 1000;
 
-        //!ACTUAL GAMEPLAY VALUES!
-        //this.medKitCount = 5;
-        //this.rockCount = 5;
+        //ACTUAL GAMEPLAY VALUES!
+        this.medKitCount = 10;
+        this.rockCount = 10;
         
         //DEBUG ONLY
-        this.medKitCount = 100;
-        this.rockCount = 100;
+        //this.medKitCount = 100;
+        //this.rockCount = 100;
 
         this.currentFishKey = "anchovy";
 
@@ -2030,7 +2039,7 @@ class Swipe extends Phaser.Scene {
         });
 
         this.chestUI = this.createCounterPanel({
-            x: this.game.config.width - 165,
+            x: this.game.config.width - 115,
             y: this.game.config.height - 135,
             iconKey: "loot",
             text: `${this.chestsCollected}/${this.levelConfig.maxChests}`,
@@ -2039,7 +2048,7 @@ class Swipe extends Phaser.Scene {
         });
 
         this.keyUI = this.createCounterPanel({
-            x: this.game.config.width - 165,
+            x: this.game.config.width - 115,
             y: this.game.config.height - 70,
             iconKey: "key",
             text: `${this.keyCollected}/1`,
@@ -2299,7 +2308,7 @@ class Swipe extends Phaser.Scene {
                 categoryText.setOrigin(0, 0.5);
                 this.unlockListContainer.add(categoryText);
 
-                rowY += 36;
+                rowY += 56;
             }
 
             const rowContainer = this.add.container(0, rowY);
