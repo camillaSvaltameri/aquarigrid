@@ -632,6 +632,7 @@ class Swipe extends Phaser.Scene {
         rowY = this.addTutorialIconLine("medkit", "Medkits", rowY);
         rowY = this.addTutorialIconLine("rock", "Rocks", rowY);
         rowY = this.addTutorialIconLine("fish", "Fish pieces", rowY);
+        rowY = this.addTutorialIconLine("gem", "Collect all 5 chests in a level to earn a bonus reward of 10 Gems.", rowY);
         rowY = this.addTutorialParagraph("If you fail before collecting the key, you lose the chests you collected during that attempt.", rowY);
 
         rowY = this.addTutorialHeading("4. Approximate Chest Rewards", rowY);
@@ -1071,6 +1072,7 @@ class Swipe extends Phaser.Scene {
         // chest rewards
         this.chestRewardConfig = {
             continueGemCost: 20,
+            fullChestBonusGems: 10,
 
             dropWeights: {
                 gold: 45,
@@ -3604,7 +3606,11 @@ class Swipe extends Phaser.Scene {
             0.34
         );
 
-        bg.setStrokeStyle(2, 0xffffff, 0.18);
+        if (reward.type === "fullChestBonus") {
+            bg.setStrokeStyle(3, 0xffd15c, 0.9);
+        } else {
+            bg.setStrokeStyle(2, 0xffffff, 0.18);
+        }
 
         const icon = this.add.image(0, -18, reward.iconKey);
 
@@ -3626,7 +3632,7 @@ class Swipe extends Phaser.Scene {
             {
                 fontFamily: "Arial",
                 fontSize: "24px",
-                color: "#ffffff",
+                color: reward.type === "fullChestBonus" ? "#ffd15c" : "#ffffff",
                 align: "center",
                 stroke: "#000000",
                 strokeThickness: 6
@@ -3642,7 +3648,7 @@ class Swipe extends Phaser.Scene {
             {
                 fontFamily: "Arial",
                 fontSize: "15px",
-                color: "#d6d6d6",
+                color: reward.type === "fullChestBonus" ? "#ffd15c" : "#d6d6d6",
                 align: "center",
                 stroke: "#000000",
                 strokeThickness: 4,
@@ -4153,6 +4159,10 @@ class Swipe extends Phaser.Scene {
             rewards.push(this.rollChestReward());
         }
 
+        if (this.chestsCollected === this.levelConfig.maxChests) {
+            rewards.push(this.rewardFullChestBonus());
+        }
+
         if (this.unlockMenuOpen) {
             this.populateUnlockList();
         }
@@ -4215,6 +4225,20 @@ class Swipe extends Phaser.Scene {
             amount: amount,
             topText: `+${amount}`,
             bottomText: "Gems"
+        };
+    }
+
+    rewardFullChestBonus() {
+        const amount = this.chestRewardConfig.fullChestBonusGems;
+
+        this.gemCount += amount;
+
+        return {
+            type: "fullChestBonus",
+            iconKey: "gem",
+            amount: amount,
+            topText: `+${amount}`,
+            bottomText: "Bonus Reward"
         };
     }
 
