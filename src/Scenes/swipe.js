@@ -712,7 +712,7 @@ class Swipe extends Phaser.Scene {
         const title = this.add.text(
             0,
             -275,
-            "fish unlocks",
+            "Fish Unlocks",
             {
                 fontFamily: "Arial",
                 fontSize: "34px",
@@ -728,7 +728,7 @@ class Swipe extends Phaser.Scene {
         const helperText = this.add.text(
             0,
             270,
-            "mouse wheel or W/S to scroll • enter to close",
+            "Mouse wheel or W/S to scroll • Enter to close",
             {
                 fontFamily: "Arial",
                 fontSize: "18px",
@@ -827,22 +827,7 @@ class Swipe extends Phaser.Scene {
 
             nameText.setOrigin(0, 0.5);
 
-            const statusInfo = this.getFishUnlockStatusText(fish);
-
-            const statusText = this.add.text(
-                90,
-                18,
-                statusInfo.text,
-                {
-                    fontFamily: "Arial",
-                    fontSize: "17px",
-                    color: statusInfo.color,
-                    stroke: "#000000",
-                    strokeThickness: 4
-                }
-            );
-
-            statusText.setOrigin(0, 0.5);
+            const statusDisplay = this.createFishStatusDisplay(fish, 90, 18);
 
             rowPanel.on("pointerover", () => {
                 fishSprite.setTexture(this.getFishOutlineTextureKey(fish.key));
@@ -856,7 +841,7 @@ class Swipe extends Phaser.Scene {
                 this.handleFishClick(fish);
             });
 
-            rowContainer.add([rowPanel, fishSprite, nameText, statusText]);
+            rowContainer.add([rowPanel, fishSprite, nameText, statusDisplay]);
             this.unlockListContainer.add(rowContainer);
 
             rowY += rowHeight;
@@ -1008,7 +993,7 @@ class Swipe extends Phaser.Scene {
         const promptText = this.add.text(
             0,
             -62,
-            `Purchase ${fish.displayName}\nfor ${fish.price} gems?`,
+            `Purchase ${fish.displayName}\nFor ${fish.price} Gems?`,
             {
                 fontFamily: "Arial",
                 fontSize: "28px",
@@ -1024,7 +1009,7 @@ class Swipe extends Phaser.Scene {
         const helperText = this.add.text(
             0,
             98,
-            "press Y for yes • press N for no",
+            "Press Y for Yes • Press N for No",
             {
                 fontFamily: "Arial",
                 fontSize: "17px",
@@ -1040,7 +1025,7 @@ class Swipe extends Phaser.Scene {
         const yesButton = this.createConfirmButton(
             -105,
             35,
-            "yes",
+            "Yes",
             "#55ff88",
             () => {
                 this.confirmFishPurchase();
@@ -1050,7 +1035,7 @@ class Swipe extends Phaser.Scene {
         const noButton = this.createConfirmButton(
             105,
             35,
-            "no",
+            "No",
             "#ffb0b0",
             () => {
                 this.cancelFishPurchase();
@@ -1523,17 +1508,17 @@ class Swipe extends Phaser.Scene {
     getUnlockCategoryLabel(category) {
         switch (category) {
             case "unlocked":
-                return "unlocked fish";
+                return "Unlocked Fish";
             case "drop":
-                return "random drop unlocks";
+                return "Random Drop Unlocks";
             case "gem":
-                return "gem unlocks";
+                return "Gem Unlocks";
             case "coin":
-                return "coin unlocks";
+                return "Coin Unlocks";
             case "requirement":
-                return "locked by requirement";
+                return "Locked by Requirement";
             default:
-                return "other unlocks";
+                return "Other Unlocks";
         }
     }
 
@@ -1565,20 +1550,20 @@ class Swipe extends Phaser.Scene {
         if (this.isFishUnlocked(fish.key)) {
             if (fish.key === this.currentFishKey) {
                 return {
-                    text: "selected",
+                    text: "Selected",
                     color: "#55ff88"
                 };
             }
 
             return {
-                text: "unlocked • click to select",
+                text: "Unlocked • Click to select",
                 color: "#55ff88"
             };
         }
 
         if (!this.isFishRequirementMet(fish)) {
             return {
-                text: `locked • requires ${this.getFishDisplayNameByKey(fish.requires)}`,
+                text: `Locked • Requires ${this.getFishDisplayNameByKey(fish.requires)}`,
                 color: "#ffb0b0"
             };
         }
@@ -1587,30 +1572,108 @@ class Swipe extends Phaser.Scene {
             const pieces = this.fishPieces[fish.key] || 0;
 
             return {
-                text: `locked • pieces ${pieces}/${fish.piecesRequired}`,
+                text: `Locked • Pieces ${pieces}/${fish.piecesRequired}`,
                 color: "#d6d6d6"
             };
         }
 
         if (fish.unlockType === "coin") {
             return {
-                text: `locked • ${fish.price} gold`,
+                text: `Locked • ${fish.price} Gold`,
                 color: "#ffd76a"
             };
         }
 
         if (fish.unlockType === "gem") {
             return {
-                text: `locked • ${fish.price} gems • click to buy`,
+                text: `Locked • ${fish.price} Gems • Click to buy`,
                 color: "#9be8ff"
             };
         }
 
         return {
-            text: "locked",
+            text: "Locked",
             color: "#d6d6d6"
         };
     }
+
+    createFishStatusDisplay(fish, x, y) {
+        const container = this.add.container(x, y);
+
+        const baseStyle = {
+            fontFamily: "Arial",
+            fontSize: "17px",
+            stroke: "#000000",
+            strokeThickness: 4
+        };
+
+        if (
+            !this.isFishUnlocked(fish.key) &&
+            this.isFishRequirementMet(fish) &&
+            fish.unlockType === "drop"
+        ) {
+            const pieces = this.fishPieces[fish.key] || 0;
+            const progressColor = pieces > 0 ? "#fff2a8" : "#d6d6d6";
+
+            const prefixText = this.add.text(
+                0,
+                0,
+                "Locked • Pieces ",
+                {
+                    ...baseStyle,
+                    color: "#d6d6d6"
+                }
+            );
+
+            prefixText.setOrigin(0, 0.5);
+
+            const pieceText = this.add.text(
+                prefixText.width,
+                0,
+                `${pieces}`,
+                {
+                    ...baseStyle,
+                    color: progressColor
+                }
+            );
+
+            pieceText.setOrigin(0, 0.5);
+
+            const suffixText = this.add.text(
+                prefixText.width + pieceText.width,
+                0,
+                `/${fish.piecesRequired}`,
+                {
+                    ...baseStyle,
+                    color: "#d6d6d6"
+                }
+            );
+
+            suffixText.setOrigin(0, 0.5);
+
+            container.add([prefixText, pieceText, suffixText]);
+
+            return container;
+        }
+
+        const statusInfo = this.getFishUnlockStatusText(fish);
+
+        const statusText = this.add.text(
+            0,
+            0,
+            statusInfo.text,
+            {
+                ...baseStyle,
+                color: statusInfo.color
+            }
+        );
+
+        statusText.setOrigin(0, 0.5);
+        container.add(statusText);
+
+        return container;
+    }
+    
     getEligiblePieceFish() {
         return this.getFishDefinitions().filter((fish) => {
             const pieces = this.fishPieces[fish.key] || 0;
@@ -1868,10 +1931,10 @@ class Swipe extends Phaser.Scene {
         this.failChoiceOpen = true;
 
         this.showLevelResult("LEVEL FAILED", [
-            `you collected ${this.chestsCollected}/${this.levelConfig.maxChests} chests`,
-            "retrying will lose all collected chests",
-            `press C to continue for ${this.chestRewardConfig.continueGemCost} gems`,
-            "press R to retry this level"
+            `You collected ${this.chestsCollected}/${this.levelConfig.maxChests} chests`,
+            "Retrying will lose all collected chests",
+            `Press C to continue for ${this.chestRewardConfig.continueGemCost} gems`,
+            "Press R to retry this level"
         ]);
     }
 
@@ -2009,7 +2072,7 @@ class Swipe extends Phaser.Scene {
         const chestText = this.add.text(
             0,
             -188,
-            `opened ${this.chestsCollected} chest${this.chestsCollected === 1 ? "" : "s"}`,
+            `Opened ${this.chestsCollected} chest${this.chestsCollected === 1 ? "" : "s"}`,
             {
                 fontFamily: "Arial",
                 fontSize: "22px",
@@ -2028,7 +2091,7 @@ class Swipe extends Phaser.Scene {
             const noRewardText = this.add.text(
                 0,
                 72,
-                "no chests opened",
+                "No chests opened",
                 {
                     fontFamily: "Arial",
                     fontSize: "28px",
@@ -2072,7 +2135,7 @@ class Swipe extends Phaser.Scene {
         const helperText = this.add.text(
             0,
             178,
-            "press ENTER to continue",
+            "Press ENTER to continue",
             {
                 fontFamily: "Arial",
                 fontSize: "19px",
@@ -2181,7 +2244,7 @@ class Swipe extends Phaser.Scene {
         const text = this.add.text(
             0,
             0,
-            "continue",
+            "Continue",
             {
                 fontFamily: "Arial",
                 fontSize: "26px",
@@ -2642,7 +2705,7 @@ class Swipe extends Phaser.Scene {
         if (this.chestsCollected <= 0) {
             rewards.push({
                 type: "none",
-                text: "no chests opened"
+                text: "No chests opened"
             });
 
             return rewards;
@@ -2699,7 +2762,7 @@ class Swipe extends Phaser.Scene {
             iconKey: "gold",
             amount: amount,
             topText: `+${amount}`,
-            bottomText: "gold"
+            bottomText: "Gold"
         };
     }
 
@@ -2713,7 +2776,7 @@ class Swipe extends Phaser.Scene {
             iconKey: "gem",
             amount: amount,
             topText: `+${amount}`,
-            bottomText: "gems"
+            bottomText: "Gems"
         };
     }
 
@@ -2725,7 +2788,7 @@ class Swipe extends Phaser.Scene {
             iconKey: "medKit",
             amount: 1,
             topText: "+1",
-            bottomText: "medkit"
+            bottomText: "Med Kit"
         };
     }
 
@@ -2737,7 +2800,7 @@ class Swipe extends Phaser.Scene {
             iconKey: "rock",
             amount: 1,
             topText: "+1",
-            bottomText: "rock"
+            bottomText: "Rock"
         };
     }
 
@@ -2768,7 +2831,7 @@ class Swipe extends Phaser.Scene {
                 fishKey: fish.key,
                 amount: amount,
                 topText: `${amount}x`,
-                bottomText: `unlocked ${fish.displayName}!`
+                bottomText: `Unlocked ${fish.displayName}!`
             };
         }
 
@@ -2778,7 +2841,7 @@ class Swipe extends Phaser.Scene {
             fishKey: fish.key,
             amount: amount,
             topText: `${amount}x`,
-            bottomText: `${fish.displayName} pieces`
+            bottomText: `${fish.displayName} Pieces`
         };
     }
 
