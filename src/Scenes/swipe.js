@@ -3,6 +3,8 @@
 class Swipe extends Phaser.Scene {
     constructor() {
         super("swipeScene");
+        this.saveVersion = 1;
+        this.saveStorageKey = "aquarigridSave";
     }
 
     preload() {
@@ -136,6 +138,170 @@ class Swipe extends Phaser.Scene {
                 }
             );
         };
+    }
+
+    getLocalStorage() {
+        if (typeof localStorage === "undefined") {
+            return null;
+        }
+
+        return localStorage;
+    }
+
+    getSaveData() {
+        return {
+            saveVersion: this.saveVersion,
+            currentLevel: this.currentLevel,
+            goldCount: this.goldCount,
+            gemCount: this.gemCount,
+            keyCount: this.keyCount,
+            medKitCount: this.medKitCount,
+            rockCount: this.rockCount,
+            currentFishKey: this.currentFishKey,
+            unlockedFishKeys: { ...this.unlockedFishKeys },
+            fishPieces: { ...this.fishPieces },
+            playerMaxHealth: this.playerMaxHealth,
+            playerStartingHealth: this.playerStartingHealth
+        };
+    }
+
+    saveProgress() {
+        if (!this.gameStarted) {
+            return;
+        }
+
+        const storage = this.getLocalStorage();
+
+        if (!storage) {
+            return;
+        }
+
+        try {
+            storage.setItem(this.saveStorageKey, JSON.stringify(this.getSaveData()));
+        } catch (error) {
+            console.warn("Unable to save progress", error);
+        }
+    }
+
+    loadProgress() {
+        const storage = this.getLocalStorage();
+
+        if (!storage) {
+            return false;
+        }
+
+        try {
+            const rawSave = storage.getItem(this.saveStorageKey);
+
+            if (!rawSave) {
+                return false;
+            }
+
+            const saveData = JSON.parse(rawSave);
+            return this.applySaveData(saveData);
+        } catch (error) {
+            console.warn("Unable to load progress", error);
+            return false;
+        }
+    }
+
+    clearSavedProgress() {
+        const storage = this.getLocalStorage();
+
+        if (!storage) {
+            return;
+        }
+
+        try {
+            storage.removeItem(this.saveStorageKey);
+        } catch (error) {
+            console.warn("Unable to reset progress", error);
+        }
+    }
+
+    applySaveData(saveData) {
+        if (!saveData || saveData.saveVersion !== this.saveVersion) {
+            return false;
+        }
+
+        const fishDefinitions = this.getFishDefinitions();
+
+        this.currentLevel = this.getSavedInteger(saveData.currentLevel, this.currentLevel, 1);
+        this.goldCount = this.getSavedInteger(saveData.goldCount, this.goldCount, 0);
+        this.gemCount = this.getSavedInteger(saveData.gemCount, this.gemCount, 0);
+        this.keyCount = this.getSavedInteger(saveData.keyCount, this.keyCount, 0);
+        this.medKitCount = this.getSavedInteger(saveData.medKitCount, this.medKitCount, 0);
+        this.rockCount = this.getSavedInteger(saveData.rockCount, this.rockCount, 0);
+
+        const savedUnlockedFish = saveData.unlockedFishKeys || {};
+        this.unlockedFishKeys = {
+            anchovy: true
+        };
+
+        for (const fish of fishDefinitions) {
+            if (savedUnlockedFish[fish.key] === true) {
+                this.unlockedFishKeys[fish.key] = true;
+            }
+        }
+
+        const savedPieces = saveData.fishPieces || {};
+        this.fishPieces = {};
+
+        for (const fish of fishDefinitions) {
+            if (fish.unlockType === "drop") {
+                this.fishPieces[fish.key] = this.getSavedInteger(
+                    savedPieces[fish.key],
+                    0,
+                    0,
+                    fish.piecesRequired
+                );
+
+                if (this.fishPieces[fish.key] >= fish.piecesRequired) {
+                    this.unlockedFishKeys[fish.key] = true;
+                }
+            }
+        }
+
+        const maxHealthBase = this.healthUpgradeConfig.maxHealth.baseValue;
+        const startingHealthBase = this.healthUpgradeConfig.startingHealth.baseValue;
+
+        this.playerMaxHealth = this.getSavedInteger(
+            saveData.playerMaxHealth,
+            this.playerMaxHealth,
+            maxHealthBase,
+            this.healthUpgradeConfig.maxHealthCap
+        );
+
+        this.playerStartingHealth = this.getSavedInteger(
+            saveData.playerStartingHealth,
+            this.playerStartingHealth,
+            startingHealthBase,
+            this.getStartingHealthCap()
+        );
+
+        this.playerHealth = this.playerStartingHealth;
+
+        if (this.isFishUnlocked(saveData.currentFishKey)) {
+            this.currentFishKey = saveData.currentFishKey;
+        } else {
+            this.currentFishKey = "anchovy";
+        }
+
+        return true;
+    }
+
+    getSavedInteger(value, fallback, min, max = Number.MAX_SAFE_INTEGER) {
+        if (!Number.isFinite(value)) {
+            return fallback;
+        }
+
+        return Math.min(
+            max,
+            Math.max(
+                min,
+                Math.floor(value)
+            )
+        );
     }
 
     getAudioDefinitions() {
@@ -286,6 +452,7 @@ class Swipe extends Phaser.Scene {
 
     createHomeScreen() {
         this.homeScreenOpen = true;
+        this.saveProgress();
         this.playBgm("titleScreenBGM");
 
         if (this.homeOverlay) {
@@ -393,7 +560,27 @@ class Swipe extends Phaser.Scene {
             () => {}
         );
 
-        this.homeOverlay.add([bg, title, ...titleFish, playButton, tutorialButton, creditsButton]);
+        const titleMenuButton = this.createTitleMenuButton();
+
+        this.homeOverlay.add([bg, title, ...titleFish, playButton, tutorialButton, creditsButton, titleMenuButton]);
+    }
+
+    createTitleMenuButton() {
+        const button = this.add.image(
+            this.game.config.width - 55,
+            55,
+            "menu"
+        );
+
+        this.fitSpriteToCell(button, 58, 58);
+        button.setInteractive({ useHandCursor: true });
+
+        button.on("pointerdown", () => {
+            this.playClickSound();
+            this.openResetProgressConfirm();
+        });
+
+        return button;
     }
 
     createHomeButton(x, y, width, height, label, color, callback) {
@@ -469,6 +656,135 @@ class Swipe extends Phaser.Scene {
         button.add([bg, text]);
 
         return button;
+    }
+
+    openResetProgressConfirm() {
+        if (this.resetProgressOverlay) {
+            return;
+        }
+
+        const centerX = this.game.config.width / 2;
+        const centerY = this.game.config.height / 2;
+
+        this.resetProgressOverlay = this.add.container(centerX, centerY);
+        this.resetProgressOverlay.setDepth(1300);
+
+        const backdrop = this.add.rectangle(
+            0,
+            0,
+            this.game.config.width,
+            this.game.config.height,
+            0x000000,
+            0.5
+        );
+
+        backdrop.setInteractive();
+
+        const panel = this.add.rectangle(0, 0, 650, 300, 0x000000, 0.82);
+        panel.setStrokeStyle(3, 0xffffff, 0.24);
+
+        const promptText = this.add.text(
+            0,
+            -68,
+            "Reset Game?\nThis will erase ALL saved progress.",
+            {
+                fontFamily: "Arial",
+                fontSize: "27px",
+                color: "#ffffff",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 6
+            }
+        );
+
+        promptText.setOrigin(0.5);
+
+        const yesButton = this.createResetProgressButton(
+            -110,
+            60,
+            "Yes",
+            "#ffb0b0",
+            () => {
+                this.confirmResetProgress();
+            }
+        );
+
+        const noButton = this.createResetProgressButton(
+            110,
+            60,
+            "No",
+            "#55ff88",
+            () => {
+                this.closeResetProgressConfirm();
+            }
+        );
+
+        this.resetProgressOverlay.add([
+            backdrop,
+            panel,
+            promptText,
+            yesButton,
+            noButton
+        ]);
+    }
+
+    createResetProgressButton(x, y, label, color, callback) {
+        const button = this.add.container(x, y);
+
+        const bg = this.add.rectangle(0, 0, 150, 54, 0x000000, 0.42);
+        bg.setStrokeStyle(2, 0xffffff, 0.24);
+        bg.setInteractive({ useHandCursor: true });
+
+        const text = this.add.text(
+            0,
+            0,
+            label,
+            {
+                fontFamily: "Arial",
+                fontSize: "24px",
+                color: color,
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 5
+            }
+        );
+
+        text.setOrigin(0.5);
+
+        bg.on("pointerdown", () => {
+            this.playClickSound();
+            callback();
+        });
+
+        button.add([bg, text]);
+
+        return button;
+    }
+
+    closeResetProgressConfirm() {
+        if (this.resetProgressOverlay) {
+            this.resetProgressOverlay.destroy();
+            this.resetProgressOverlay = null;
+        }
+    }
+
+    confirmResetProgress() {
+        this.clearSavedProgress();
+        this.gameStarted = false;
+
+        if (this.currentBgm) {
+            this.currentBgm.stop();
+            this.currentBgm.destroy();
+            this.currentBgm = null;
+            this.currentBgmKey = null;
+        }
+
+        if (typeof window !== "undefined" && window.location) {
+            window.location.reload();
+            return;
+        }
+
+        this.scene.restart();
     }
 
     createTitleFish(textureKey, x, y, scale, swimDistance, bobDistance, duration, shouldFlip, config = {}) {
@@ -1219,6 +1535,7 @@ class Swipe extends Phaser.Scene {
         this.playerMaxHealth = this.healthUpgradeConfig.maxHealth.baseValue;
         this.playerStartingHealth = this.healthUpgradeConfig.startingHealth.baseValue;
         this.playerHealth = this.playerStartingHealth;
+        this.loadProgress();
 
         this.playerGridPos = {
             row: 1,
@@ -2619,6 +2936,7 @@ class Swipe extends Phaser.Scene {
         this.updateHealthText();
         this.updateUI();
         this.populateShop();
+        this.saveProgress();
         this.showChestRewardMessage("Max Health upgraded");
     }
 
@@ -2645,6 +2963,7 @@ class Swipe extends Phaser.Scene {
         this.updateHealthText();
         this.updateUI();
         this.populateShop();
+        this.saveProgress();
         this.showChestRewardMessage("Starting Health upgraded");
     }
 
@@ -2661,6 +2980,7 @@ class Swipe extends Phaser.Scene {
 
         this.updateUI();
         this.populateShop();
+        this.saveProgress();
         this.showChestRewardMessage("Purchased Med Kit");
     }
 
@@ -2677,6 +2997,7 @@ class Swipe extends Phaser.Scene {
 
         this.updateUI();
         this.populateShop();
+        this.saveProgress();
         this.showChestRewardMessage("Purchased Rock");
     }
 
@@ -2703,6 +3024,7 @@ class Swipe extends Phaser.Scene {
             this.playSfx("unlockSound", { volume: 0.75 });
             this.updateUI();
             this.populateShop();
+            this.saveProgress();
             this.showChestRewardMessage("This fish has already been unlocked");
             return;
         }
@@ -2732,6 +3054,7 @@ class Swipe extends Phaser.Scene {
 
         this.updateUI();
         this.populateShop();
+        this.saveProgress();
     }
 
     getFishOutlineKey(fishKey) {
@@ -2806,6 +3129,7 @@ class Swipe extends Phaser.Scene {
             this.populateUnlockList();
         }
 
+        this.saveProgress();
         this.showChestRewardMessage(`Selected ${this.getFishDisplayNameByKey(fishKey)}`);
     }
 
@@ -2956,6 +3280,7 @@ class Swipe extends Phaser.Scene {
 
         this.cancelFishPurchase();
         this.updateUI();
+        this.saveProgress();
 
         if (this.unlockMenuOpen) {
             this.populateUnlockList();
@@ -3577,6 +3902,7 @@ class Swipe extends Phaser.Scene {
         this.medKitCount--;
         this.changePlayerHealth(10);
         this.updateUI();
+        this.saveProgress();
 
         this.flyItemToPlayer("medKit", this.medKitUI.icon, () => {
             // Placeholder for later sparkle/heal animation.
@@ -3601,6 +3927,7 @@ class Swipe extends Phaser.Scene {
         this.rockCount--;
         this.rockShieldActive = true;
         this.updateUI();
+        this.saveProgress();
 
         this.flyItemToPlayer("rock", this.rockUI.icon, () => {
             if (this.rockShieldActive) {
@@ -3764,6 +4091,8 @@ class Swipe extends Phaser.Scene {
         this.playSfx("levelCompleteSound", { volume: 0.78 });
 
         const rewards = this.openLevelChests();
+        this.currentLevel++;
+        this.saveProgress();
 
         this.showLevelRewardScreen(rewards);
         this.updateUI();
@@ -3777,7 +4106,6 @@ class Swipe extends Phaser.Scene {
             this.levelResultOverlay = null;
         }
 
-        this.currentLevel++;
         this.restartLevelState();
     }
 
@@ -3815,6 +4143,7 @@ class Swipe extends Phaser.Scene {
         }
 
         this.updateUI();
+        this.saveProgress();
         this.showChestRewardMessage("Continued with starting health");
     }
 
