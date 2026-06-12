@@ -282,6 +282,8 @@ class Swipe extends Phaser.Scene {
         this.menuOpen = false;
         this.unlockMenuOpen = false;
         this.failChoiceOpen = false;
+        this.levelRewardOpen = false;
+
         this.unlockScrollY = 0;
         this.unlockMaxScroll = 0;
         this.turnCount = 0;
@@ -389,6 +391,14 @@ class Swipe extends Phaser.Scene {
                 Phaser.Input.Keyboard.JustDown(this.keys.enter)
             ) {
                 this.cancelFishPurchase();
+            }
+
+            return;
+        }
+
+        if (this.levelRewardOpen) {
+            if (Phaser.Input.Keyboard.JustDown(this.keys.enter)) {
+                this.continueAfterRewards();
             }
 
             return;
@@ -577,6 +587,7 @@ class Swipe extends Phaser.Scene {
 
         if (config.iconKey === "rock") {
             this.fitSpriteToCell(icon, 64, 64);
+            icon.y -= 16;
         } else if (config.iconKey === "medKit") {
             this.fitSpriteToCell(icon, 54, 54);
         } else {
@@ -1831,16 +1842,24 @@ class Swipe extends Phaser.Scene {
     completeLevel() {
         this.levelEnded = true;
         this.isMoving = true;
+        this.levelRewardOpen = true;
 
-        const rewardLines = this.openLevelChests();
+        const rewards = this.openLevelChests();
 
-        this.showLevelResult("LEVEL COMPLETE", rewardLines);
+        this.showLevelRewardScreen(rewards);
         this.updateUI();
+    }
 
-        this.time.delayedCall(this.timing.levelTransitionDelay, () => {
-            this.currentLevel++;
-            this.restartLevelState();
-        });
+    continueAfterRewards() {
+        this.levelRewardOpen = false;
+
+        if (this.levelResultOverlay) {
+            this.levelResultOverlay.destroy();
+            this.levelResultOverlay = null;
+        }
+
+        this.currentLevel++;
+        this.restartLevelState();
     }
 
     failLevel() {
@@ -1939,6 +1958,249 @@ class Swipe extends Phaser.Scene {
         this.levelResultOverlay.add([overlay, resultText, detailText]);
     }
 
+    showLevelRewardScreen(rewards) {
+        if (this.levelResultOverlay) {
+            this.levelResultOverlay.destroy();
+        }
+
+        this.levelResultOverlay = this.add.container(
+            this.game.config.width / 2,
+            this.game.config.height / 2
+        );
+
+        this.levelResultOverlay.setDepth(450);
+
+        const overlay = this.add.rectangle(
+            0,
+            0,
+            this.game.config.width,
+            this.game.config.height,
+            0x000000,
+            0.45
+        );
+
+        const panel = this.add.rectangle(
+            0,
+            0,
+            720,
+            560,
+            0x000000,
+            0.62
+        );
+
+        panel.setStrokeStyle(3, 0xffffff, 0.22);
+
+        const titleText = this.add.text(
+            0,
+            -235,
+            "LEVEL COMPLETE",
+            {
+                fontFamily: "Arial",
+                fontSize: "46px",
+                color: "#ffffff",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 8
+            }
+        );
+
+        titleText.setOrigin(0.5);
+
+        const chestText = this.add.text(
+            0,
+            -188,
+            `opened ${this.chestsCollected} chest${this.chestsCollected === 1 ? "" : "s"}`,
+            {
+                fontFamily: "Arial",
+                fontSize: "22px",
+                color: "#ffeaa7",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 5
+            }
+        );
+
+        chestText.setOrigin(0.5);
+
+        const rewardList = this.add.container(0, -112);
+
+        if (rewards.length === 1 && rewards[0].type === "none") {
+            const noRewardText = this.add.text(
+                0,
+                72,
+                "no chests opened",
+                {
+                    fontFamily: "Arial",
+                    fontSize: "28px",
+                    color: "#ffffff",
+                    align: "center",
+                    stroke: "#000000",
+                    strokeThickness: 6
+                }
+            );
+
+            noRewardText.setOrigin(0.5);
+            rewardList.add(noRewardText);
+        } else {
+            const columns = 3;
+            const spacingX = 205;
+            const spacingY = 135;
+
+            for (let i = 0; i < rewards.length; i++) {
+                const reward = rewards[i];
+                const col = i % columns;
+                const row = Math.floor(i / columns);
+
+                const rewardCard = this.createRewardCard(
+                    reward,
+                    (col - 1) * spacingX,
+                    row * spacingY
+                );
+
+                rewardList.add(rewardCard);
+            }
+        }
+
+        const continueButton = this.createContinueButton(
+            0,
+            225,
+            () => {
+                this.continueAfterRewards();
+            }
+        );
+
+        const helperText = this.add.text(
+            0,
+            178,
+            "press ENTER to continue",
+            {
+                fontFamily: "Arial",
+                fontSize: "19px",
+                color: "#ffffff",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 5
+            }
+        );
+
+        helperText.setOrigin(0.5);
+
+        this.levelResultOverlay.add([
+            overlay,
+            panel,
+            titleText,
+            chestText,
+            rewardList,
+            helperText,
+            continueButton
+        ]);
+    }
+
+    createRewardCard(reward, x, y) {
+        const card = this.add.container(x, y);
+
+        const bg = this.add.rectangle(
+            0,
+            0,
+            170,
+            112,
+            0x000000,
+            0.34
+        );
+
+        bg.setStrokeStyle(2, 0xffffff, 0.18);
+
+        const icon = this.add.image(0, -18, reward.iconKey);
+
+        if (reward.type === "fishPieces") {
+            icon.setScale(5);
+        } else if (reward.type === "rock") {
+            this.fitSpriteToCell(icon, 58, 58);
+            icon.y -= 4;
+        } else if (reward.type === "medKit") {
+            this.fitSpriteToCell(icon, 54, 54);
+        } else {
+            this.fitSpriteToCell(icon, 48, 48);
+        }
+
+        const amountText = this.add.text(
+            0,
+            23,
+            reward.topText,
+            {
+                fontFamily: "Arial",
+                fontSize: "24px",
+                color: "#ffffff",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 6
+            }
+        );
+
+        amountText.setOrigin(0.5);
+
+        const labelText = this.add.text(
+            0,
+            49,
+            reward.bottomText,
+            {
+                fontFamily: "Arial",
+                fontSize: "15px",
+                color: "#d6d6d6",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 4,
+                wordWrap: {
+                    width: 150
+                }
+            }
+        );
+
+        labelText.setOrigin(0.5);
+
+        card.add([bg, icon, amountText, labelText]);
+
+        return card;
+    }
+
+    createContinueButton(x, y, callback) {
+        const button = this.add.container(x, y);
+
+        const bg = this.add.rectangle(
+            0,
+            0,
+            230,
+            58,
+            0x000000,
+            0.42
+        );
+
+        bg.setStrokeStyle(2, 0xffffff, 0.24);
+        bg.setInteractive({ useHandCursor: true });
+
+        const text = this.add.text(
+            0,
+            0,
+            "continue",
+            {
+                fontFamily: "Arial",
+                fontSize: "26px",
+                color: "#55ff88",
+                align: "center",
+                stroke: "#000000",
+                strokeThickness: 6
+            }
+        );
+
+        text.setOrigin(0.5);
+
+        bg.on("pointerdown", callback);
+
+        button.add([bg, text]);
+
+        return button;
+    }
+
     restartLevelState() {
         if (this.levelResultOverlay) {
             this.levelResultOverlay.destroy();
@@ -1965,6 +2227,7 @@ class Swipe extends Phaser.Scene {
         this.levelEnded = false;
         this.isMoving = false;
         this.failChoiceOpen = false;
+        this.levelRewardOpen = false;
         this.turnCount = 0;
 
         this.chestsSpawned = 0;
@@ -2374,24 +2637,26 @@ class Swipe extends Phaser.Scene {
     }
 
     openLevelChests() {
-        const rewardLines = [];
+        const rewards = [];
 
         if (this.chestsCollected <= 0) {
-            rewardLines.push("no chests opened");
-            return rewardLines;
+            rewards.push({
+                type: "none",
+                text: "no chests opened"
+            });
+
+            return rewards;
         }
 
-        rewardLines.push(`opened ${this.chestsCollected} chest${this.chestsCollected === 1 ? "" : "s"}`);
-
         for (let i = 0; i < this.chestsCollected; i++) {
-            rewardLines.push(this.rollChestReward());
+            rewards.push(this.rollChestReward());
         }
 
         if (this.unlockMenuOpen) {
             this.populateUnlockList();
         }
 
-        return rewardLines;
+        return rewards;
     }
 
     rollChestReward() {
@@ -2428,24 +2693,52 @@ class Swipe extends Phaser.Scene {
         const amount = this.getGoldDropAmount();
 
         this.goldCount += amount;
-        return `+${amount} gold`;
+
+        return {
+            type: "gold",
+            iconKey: "gold",
+            amount: amount,
+            topText: `+${amount}`,
+            bottomText: "gold"
+        };
     }
 
     rewardGems() {
         const amount = this.pickWeightedValue(this.chestRewardConfig.gemDropValues);
 
         this.gemCount += amount;
-        return `+${amount} gems`;
+
+        return {
+            type: "gems",
+            iconKey: "gem",
+            amount: amount,
+            topText: `+${amount}`,
+            bottomText: "gems"
+        };
     }
 
     rewardMedKit() {
         this.medKitCount++;
-        return "+1 medkit";
+
+        return {
+            type: "medKit",
+            iconKey: "medKit",
+            amount: 1,
+            topText: "+1",
+            bottomText: "medkit"
+        };
     }
 
     rewardRock() {
         this.rockCount++;
-        return "+1 rock";
+
+        return {
+            type: "rock",
+            iconKey: "rock",
+            amount: 1,
+            topText: "+1",
+            bottomText: "rock"
+        };
     }
 
     rewardFishPieces() {
@@ -2468,10 +2761,25 @@ class Swipe extends Phaser.Scene {
 
         if (newPieces >= fish.piecesRequired) {
             this.unlockedFishKeys[fish.key] = true;
-            return `unlocked ${fish.displayName}!`;
+
+            return {
+                type: "fishPieces",
+                iconKey: fish.key,
+                fishKey: fish.key,
+                amount: amount,
+                topText: `${amount}x`,
+                bottomText: `unlocked ${fish.displayName}!`
+            };
         }
 
-        return `+${amount} ${fish.displayName} pieces`;
+        return {
+            type: "fishPieces",
+            iconKey: fish.key,
+            fishKey: fish.key,
+            amount: amount,
+            topText: `${amount}x`,
+            bottomText: `${fish.displayName} pieces`
+        };
     }
 
     getGoldDropAmount() {
